@@ -9,7 +9,7 @@ parser.add_argument("--build-id", required=True)
 args = parser.parse_args()
 if not args.build_id.isalnum():
     raise SystemExit("Build ID must be alphanumeric")
-marker = "WOW-CUSTOM-ARM64-WAIT"
+marker = "WOW-CUSTOM-ARM64-RB"
 build = args.build_id[:12]
 
 def replace(path, before, after):

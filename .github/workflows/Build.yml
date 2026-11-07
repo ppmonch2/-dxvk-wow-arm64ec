@@ -1,10 +1,10 @@
 
-name: Build ARM64 wait profiling trial
+name: Build ARM64 early readback trial
 
 on:
   workflow_dispatch:
   push:
-    branches: ['experiment/wow-arm64-waits']
+    branches: ['experiment/wow-arm64-readback']
 
 permissions:
   contents: read
@@ -51,7 +51,8 @@ jobs:
           python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
           python3 scripts/apply_lab.py dxvk
           python3 scripts/apply_waits.py dxvk
-          git -C dxvk add -N src/dxvk/lab_stats.h src/dxvk/wow_metrics.h
+          python3 scripts/apply_readback.py dxvk
+          git -C dxvk add -N src/dxvk/lab_stats.h src/dxvk/wow_metrics.h src/dxvk/readback_policy.h
           git -C dxvk diff --check
           git -C dxvk diff > diagnostic.patch
 
@@ -107,7 +108,7 @@ jobs:
           cp diagnostic.patch out/
           cp dxvk/LICENSE out/LICENSE-DXVK
           {
-            echo "Marker: WOW-CUSTOM-ARM64-WAIT"
+            echo "Marker: WOW-CUSTOM-ARM64-RB"
             echo "Repository commit: $GITHUB_SHA"
             echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
             echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
@@ -128,8 +129,8 @@ jobs:
       - name: Download previous async trial for upgrade checks
         uses: actions/download-artifact@v4
         with:
-          name: WOW-DXVK-ARM64-LAB-5d1041de07749b902cd1adbd4cfd43e87a454674
-          run-id: 42416667340
+          name: WOW-DXVK-ARM64-WAIT-a0080307388c1c1b07115bdf7e93908087f9ce83
+          run-id: 42419522118
           github-token: ${{ github.token }}
           path: previous
       - name: Package trial and build matching native installer
@@ -174,7 +175,7 @@ jobs:
           'Installer Windows tests: PASS. Tablet async trial: NOT YET TESTED.' | Out-File -Encoding utf8 package/TEST-RESULTS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WOW-DXVK-ARM64-WAIT-${{ github.sha }}
+          name: WOW-DXVK-ARM64-RB-${{ github.sha }}
           path: package/
           retention-days: 30
           if-no-files-found: error

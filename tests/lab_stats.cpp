@@ -1,5 +1,6 @@
 #include "../patches/lab/lab_stats.h"
 #include <atomic>
+#include "../patches/lab/readback_policy.h"
 #include <cassert>
 #include <cstring>
 #include <limits>
@@ -12,6 +13,15 @@ struct State {
   bool operator == (const State& other) const { return words == other.words; }
 };
 int main() {
+  dxvk::lab::ReadbackBudget budget;
+  assert(!budget.take(false,true));
+  assert(!budget.take(true,false));
+  assert(budget.take(true,true));
+  assert(!budget.take(true,true));
+  budget.endFrame();
+  assert(!budget.take(false,true));
+  assert(budget.take(true,true));
+
   dxvk::lab::FrameHistogram h;
   assert(h.percentile(95) == 0);
   for (double ms : {10., 20., 30., 40., 100., 200.}) h.add(ms);

@@ -16,6 +16,9 @@ namespace dxvk::lab {
     std::atomic<uint64_t> waitUs {0}, workerUs {0}, queuePeak {0};
   };
   inline WorkerCounters counters;
+  inline std::atomic<uint64_t> readbackEligible {0}, readbackSubmits {0};
+  inline std::atomic<uint64_t> mapRead {0}, mapWrite {0}, mapReadWrite {0};
+  inline std::atomic<unsigned> mapSeen {0};
   inline void noteQueue(uint64_t depth) {
     if (!metricsEnabled()) return;
     counters.queued.fetch_add(1, std::memory_order_relaxed);
@@ -104,6 +107,11 @@ namespace dxvk::lab {
         " resource_calls_total=", waitCalls(WaitKind::Resource), " resource_us_total=", waitUs(WaitKind::Resource),
         " resource_max_us=", waitMax(WaitKind::Resource), " idle_us_total=", waitUs(WaitKind::Idle),
         " window_lock_us_total=", waitUs(WaitKind::Window), " buffer_lock_us_total=", waitUs(WaitKind::Buffer),
+        " readback_eligible_total=", readbackEligible.load(std::memory_order_relaxed),
+        " readback_submit_total=", readbackSubmits.load(std::memory_order_relaxed),
+        " map_read_total=", mapRead.load(std::memory_order_relaxed),
+        " map_write_total=", mapWrite.load(std::memory_order_relaxed),
+        " map_readwrite_total=", mapReadWrite.load(std::memory_order_relaxed),
         " query_calls_total=", queryCalls.load(std::memory_order_relaxed),
         " query_notready_total=", queryNotReady.load(std::memory_order_relaxed)));
       intervals = FrameHistogram(); presentCalls = FrameHistogram(); windowStart = end;

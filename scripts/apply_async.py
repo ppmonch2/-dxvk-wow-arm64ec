@@ -58,12 +58,12 @@ replace('src/dxvk/dxvk_graphics.cpp',
         '        m_async = true;\n'
         '        static std::atomic<bool> loggedAsync { false };\n'
         '        if (!loggedAsync.exchange(true, std::memory_order_relaxed))\n'
-        f'          Logger::info("WOW-CUSTOM-ARM64-WAIT build={build} async_pipeline_scheduled");')
+        f'          Logger::info("WOW-CUSTOM-ARM64-RB build={build} async_pipeline_scheduled");')
 
 replace('src/dxvk/dxvk_instance.cpp',
         '    m_options = DxvkOptions(m_config);',
         '    m_options = DxvkOptions(m_config);\n'
-        f'    Logger::info(str::format("WOW-CUSTOM-ARM64-WAIT build={build} async=",\n'
+        f'    Logger::info(str::format("WOW-CUSTOM-ARM64-RB build={build} async=",\n'
         '      m_options.enableAsync ? 1 : 0, " gplAsyncCache=", m_options.gplAsyncCache ? 1 : 0));')
 
 # Diagnostic files must retain the final lines even if the process terminates.
@@ -72,7 +72,7 @@ replace('src/util/log/log.cpp',
         '        if (m_fileStream)\n          m_fileStream << adjusted;',
         '        if (m_fileStream) {\n'
         '          m_fileStream << adjusted;\n'
-        '          if (message.find("WOW-CUSTOM-ARM64-WAIT") != std::string::npos)\n'
+        '          if (message.find("WOW-CUSTOM-ARM64-RB") != std::string::npos)\n'
         '            m_fileStream.flush();\n'
         '        }')
 
