@@ -46,19 +46,24 @@ jobs:
               r"typedef\s+struct\s+"
               r"_D3DDEVINFO_RESOURCEMANAGER\s*\{"
               r"[^{}]*\}\s*"
-              r"D3DDEVINFO_RESOURCEMANAGER\s*;"
+              r"D3DDEVINFO_RESOURCEMANAGER"
+              r"(?:\s*,\s*\*\s*LPD3DDEVINFO_RESOURCEMANAGER)?"
+              r"\s*;"
           )
 
           patched, count = re.subn(pattern, "", source)
 
-          if count != 1:
+          if count == 1:
+              path.write_text(patched)
+              print("Duplicate D3D9 definition removed.")
+          elif count == 0:
               raise SystemExit(
-                  f"Expected one definition, found {count}. "
-                  "Source file was not modified."
+                  "Definition not found. Inspect d3d9_include.h."
               )
-
-          path.write_text(patched)
-          print("Duplicate D3D9 definition removed.")
+          else:
+              raise SystemExit(
+                  f"Unexpected number of definitions: {count}"
+              )
           PY
 
       - name: Cross compile baseline
