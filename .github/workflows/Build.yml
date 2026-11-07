@@ -1,8 +1,13 @@
 
-name: DXVK ARM64EC baseline build
+name: DXVK ARM64EC diagnostic build
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['experiment/wow-custom-arm64ec-marker']
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -32,6 +37,13 @@ jobs:
       - name: Checkout DXVK v2.3.1
         run: |
           git clone --recursive --branch v2.3.1 --depth 1 https://github.com/doitsujin/dxvk.git dxvk
+
+      - name: Apply runtime diagnostics
+        run: |
+          test "$(git -C dxvk rev-parse HEAD)" = "037d0fa1ad093065b18dad968d5898cbcd143e0e"
+          python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
+          git -C dxvk diff --check
+          git -C dxvk diff > diagnostic.patch
 
       - name: Fix duplicate D3D9 definition
         run: |
@@ -66,22 +78,40 @@ jobs:
               )
           PY
 
-      - name: Cross compile baseline
+      - name: Cross compile diagnostic DLLs
         run: |
           meson setup dxvk/build-arm64ec dxvk \
             --cross-file "$GITHUB_WORKSPACE/arm64ec.txt" \
             -Dbuildtype=release
           ninja -C dxvk/build-arm64ec -j 2
 
-      - name: Collect DLLs
+      - name: Verify and package diagnostic DLLs
         run: |
           mkdir -p out
-          find dxvk/build-arm64ec -type f -iname '*.dll' -exec cp -v {} out/ \;
-          test -n "$(find out -name '*.dll' -print -quit)"
-          sha256sum out/*.dll > out/SHA256SUMS
+          cp dxvk/build-arm64ec/src/d3d11/d3d11.dll out/
+          cp dxvk/build-arm64ec/src/dxgi/dxgi.dll out/
+          python3 scripts/verify_dlls.py out | tee out/VERIFICATION.txt
+          llvm-readobj --file-headers --coff-load-config out/d3d11.dll out/dxgi.dll > out/PE-HEADERS.txt
+          cp TESTING-RU.md out/
+          cp diagnostic.patch out/
+          cp dxvk/LICENSE out/LICENSE-DXVK
+          {
+            echo "Marker: WOW-CUSTOM-ARM64EC"
+            echo "Repository commit: $GITHUB_SHA"
+            echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
+            echo "LLVM-MinGW: 20251104 ucrt ARM64EC"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Runtime on Xiaomi Pad 6: NOT TESTED"
+            echo "GPLAsync: not included; performance changes: none"
+          } > out/BUILD-INFO.txt
+          (cd out && sha256sum d3d11.dll dxgi.dll > SHA256SUMS)
+          cp dxvk/build-arm64ec/meson-logs/meson-log.txt out/
 
-      - name: Upload build artifact
+      - name: Upload diagnostic ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dxvk-2.3.1-arm64ec-baseline-UNTESTED
+          name: dxvk-2.3.1-WOW-CUSTOM-ARM64EC-${{ github.sha }}
           path: out/
+          if-no-files-found: error
+          retention-days: 30
+

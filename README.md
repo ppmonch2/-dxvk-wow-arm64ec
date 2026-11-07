@@ -1,10 +1,18 @@
-# DXVK WoW ARM64EC — baseline build scaffold
+# DXVK 2.3.1 ARM64EC — эксперимент загрузки WoW
+Ветка: experiment/wow-custom-arm64ec-marker. main не изменяется.
 
-This is a **build workflow**, not a compiled or optimized DXVK package.
+Workflow собирает upstream v2.3.1 (037d0fa1ad093065b18dad968d5898cbcd143e0e)
+тем же LLVM-MinGW 20251104 и arm64ec.txt, что успешная базовая сборка.
+Сохранено исправление дублирующего определения D3D9.
+GPLAsync отсутствует в выбранном upstream; наличие GPLAsync во встроенном DXVK ещё нужно установить.
 
-- Target: DXVK upstream v2.3.1, ARM64EC.
-- Important: upstream v2.3.1 **does not contain the GPLAsync patches** used by the current WeHavePhones binary. The output is therefore NOT a drop-in replacement.
-- Purpose: establish a reproducible baseline compiler/toolchain before integrating a version-compatible GPLAsync patch and any game-specific change.
-- Use GitHub Actions → Actions → DXVK ARM64EC baseline build → Run workflow in your own repository.
-- Build has NOT been executed or validated here because network access to GitHub is unavailable from the build environment.
-- Do NOT install resulting DLLs into your working WeHavePhones container yet.
+scripts/apply_marker.py добавляет WOW-CUSTOM-ARM64EC в реальный код HUD и логирования
+d3d11.dll/dxgi.dll, с идентификатором коммита. Скрипт прекращает работу при несовпадении исходников.
+scripts/verify_dlls.py проверяет итоговые PE, ARM64EC-цель/CHPE metadata и диагностические строки.
+Проверка строк в DLL дополняет проверку мест вызовов в исходниках; запуск на планшете всё ещё необходим.
+
+GitHub Actions запускается по push в экспериментальную ветку или вручную через workflow_dispatch.
+ZIP-артефакт содержит обе DLL, SHA256SUMS, BUILD-INFO.txt, отчёт PE и [инструкцию](TESTING-RU.md).
+Успешность новой сборки устанавливается по конкретному запуску Actions, не по этому README.
+Оптимизации производительности и изменения рабочего контейнера не входят в эксперимент.
+
