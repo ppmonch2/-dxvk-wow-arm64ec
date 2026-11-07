@@ -2,8 +2,6 @@
 name: DXVK ARM64EC baseline build
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -11,14 +9,15 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git curl wget unzip xz-utils meson ninja-build python3 pkg-config
 
-      - name: Install LLVM-MinGW ARM64EC cross compiler
+      - name: Install LLVM-MinGW ARM64EC
         run: |
           wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -xf llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
@@ -34,9 +33,39 @@ jobs:
         run: |
           git clone --recursive --branch v2.3.1 --depth 1 https://github.com/doitsujin/dxvk.git dxvk
 
+      - name: Fix duplicate D3D9 definition
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("dxvk/src/d3d9/d3d9_include.h")
+          source = path.read_text()
+
+          pattern = (
+              r"typedef\s+struct\s+"
+              r"_D3DDEVINFO_RESOURCEMANAGER\s*\{"
+              r"[^{}]*\}\s*"
+              r"D3DDEVINFO_RESOURCEMANAGER\s*;"
+          )
+
+          patched, count = re.subn(pattern, "", source)
+
+          if count != 1:
+              raise SystemExit(
+                  f"Expected one definition, found {count}. "
+                  "Source file was not modified."
+              )
+
+          path.write_text(patched)
+          print("Duplicate D3D9 definition removed.")
+          PY
+
       - name: Cross compile baseline
         run: |
-          meson setup dxvk/build-arm64ec dxvk --cross-file "$GITHUB_WORKSPACE/arm64ec.txt" -Dbuildtype=release
+          meson setup dxvk/build-arm64ec dxvk \
+            --cross-file "$GITHUB_WORKSPACE/arm64ec.txt" \
+            -Dbuildtype=release
           ninja -C dxvk/build-arm64ec -j 2
 
       - name: Collect DLLs
@@ -46,7 +75,8 @@ jobs:
           test -n "$(find out -name '*.dll' -print -quit)"
           sha256sum out/*.dll > out/SHA256SUMS
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
         with:
           name: dxvk-2.3.1-arm64ec-baseline-UNTESTED
           path: out/
