@@ -1,0 +1,297 @@
+name: Build isolated WoW Proton 11 trial
+'on':
+  push:
+    branches:
+    - experiment/wow-proton11
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  runtime:
+    name: Build WoW Proton 11 ARM64EC runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    defaults:
+      run:
+        working-directory: wine
+        shell: bash
+    steps:
+    - name: Checkout trial scripts
+      uses: actions/checkout@v4
+      with:
+        path: trial
+    - name: Free up disk space
+      run: 'sudo rm -rf /usr/share/dotnet
+
+        sudo rm -rf /opt/ghc
+
+        sudo rm -rf /usr/local/share/boost
+
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+
+        df -h
+
+        '
+      working-directory: .
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        repository: The412Banner/proton-wine
+        ref: a01a7c58ff7d7c79fe30a34e54e1a685f4d8c2b3
+        path: wine
+        submodules: recursive
+    - name: Set up build environment
+      run: "sudo dpkg --add-architecture i386\nsudo apt-get update\nsudo apt-get install -y \\\n  build-essential \\\n  git \\\n  wget \\\n  curl \\\n  unzip \\\n  flex \\\n  bison \\\n  gettext \\\n  autoconf \\\n  automake \\\n  libtool \\\n  pkg-config \\\n  mingw-w64 \\\n  gcc-multilib \\\n  g++-multilib \\\n  libwayland-bin \\\n  libfreetype6-dev \\\n  libfreetype6-dev:i386 \\\n  libpng-dev \\\n  libpng-dev:i386 \\\n  zlib1g-dev \\\n  zlib1g-dev:i386\n"
+    - name: Download and extract termuxfs for aarch64
+      run: 'mkdir -p $HOME/termuxfs/aarch64
+
+        cd $HOME/termuxfs/aarch64
+
+        wget https://github.com/GameNative/termux-on-gha/releases/download/build-20260218/termuxfs-aarch64.tar
+
+        tar -xf termuxfs-aarch64.tar
+
+        ls -la $HOME/termuxfs/aarch64/
+
+        '
+    - name: Cache Android NDK
+      id: cache-ndk
+      uses: actions/cache@v4
+      with:
+        path: ~/Android/Sdk/ndk/27.3.13750724
+        key: android-ndk-r27d
+    - name: Set up Android NDK
+      if: steps.cache-ndk.outputs.cache-hit != 'true'
+      run: 'mkdir -p $HOME/Android/Sdk/ndk
+
+        cd $HOME/Android/Sdk/ndk
+
+        wget https://dl.google.com/android/repository/android-ndk-r27d-linux.zip
+
+        unzip -q android-ndk-r27d-linux.zip
+
+        mv android-ndk-r27d 27.3.13750724
+
+        '
+    - name: Cache LLVM MinGW toolchain
+      id: cache-llvm-mingw
+      uses: actions/cache@v4
+      with:
+        path: ~/toolchains/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64
+        key: bylaws-llvm-mingw-20250920
+    - name: Set up LLVM MinGW toolchain
+      if: steps.cache-llvm-mingw.outputs.cache-hit != 'true'
+      run: 'mkdir -p $HOME/toolchains
+
+        cd $HOME/toolchains
+
+        wget https://github.com/bylaws/llvm-mingw/releases/download/20250920/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
+
+        tar -xf llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64.tar.xz
+
+        '
+    - name: Autogen
+      run: 'bash build-scripts/build-step0-autogen.sh
+
+        '
+    - name: Cache wine-tools
+      id: cache-wine-tools
+      uses: actions/cache@v4
+      with:
+        path: wine/wine-tools
+        key: wine-tools-${{ hashFiles('wine/configure.ac', 'wine/configure') }}
+    - name: Install ccache
+      run: sudo apt-get update && sudo apt-get install -y ccache
+    - name: Cache ccache (aarch64 / sdk28)
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-p11-aarch64-28-${{ github.sha }}
+        restore-keys: 'ccache-p11-aarch64-28-
+
+          '
+    - name: Build wine-tools (step 0)
+      if: steps.cache-wine-tools.outputs.cache-hit != 'true'
+      run: 'bash build-scripts/build-step0.sh
+
+        '
+    - name: Build sysvshm library for aarch64
+      run: "if [ \"aarch64\" == \"x86_64\" ]; then\n  bash build-scripts/build-step-x86_64.sh --build-sysvshm\nelse\n  bash build-scripts/build-step-arm64ec.sh --build-sysvshm\nfi\n"
+    - name: Check out ntsync-android (pinned 7ce6435)
+      uses: actions/checkout@v4
+      with:
+        repository: GameNative/ntsync-android
+        ref: 7ce6435e5979b1cb5341aa4b299f31e8937fe121
+        path: _deps/ntsync-android
+    - name: Set up Rust for ntsync-android
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: aarch64-linux-android, x86_64-linux-android
+    - name: Build ntsync-android library for aarch64
+      env:
+        NTSYNC_ANDROID_DIR: ${{ github.workspace }}/_deps/ntsync-android
+      run: "test \"$(git -C \"$NTSYNC_ANDROID_DIR\" rev-parse HEAD)\" = 7ce6435e5979b1cb5341aa4b299f31e8937fe121\nif [ \"aarch64\" == \"x86_64\" ]; then\n  bash build-scripts/build-step-x86_64.sh --build-ntsync-android\nelse\n  bash build-scripts/build-step-arm64ec.sh --build-ntsync-android\nfi\n"
+    - name: Configure build for aarch64 (sdk28)
+      run: "PAGES_FLAG=\"\"\n{ [ \"aarch64\" = \"aarch64\" ] || [ \"28\" = \"35\" ]; } && PAGES_FLAG=\"--enable-16kb-pages\"\nif [ \"aarch64\" == \"x86_64\" ]; then\n  bash build-scripts/build-step-x86_64.sh $PAGES_FLAG --configure\nelse\n  bash build-scripts/build-step-arm64ec.sh $PAGES_FLAG --configure\nfi\n"
+    - name: Port WoW native ARM64 fixes to Wine 11
+      run: 'python3 "$GITHUB_WORKSPACE/trial/runtime/patch_runtime.py" .
+
+        git -c user.name=WoW-Lab -c user.email=lab@example.invalid tag -a WOW-PROTON11-GE11.0-9 -m WOW-PROTON11
+
+        git diff --check'
+    - name: Build Proton for aarch64 (sdk28)
+      run: "PAGES_FLAG=\"\"\n{ [ \"aarch64\" = \"aarch64\" ] || [ \"28\" = \"35\" ]; } && PAGES_FLAG=\"--enable-16kb-pages\"\nif [ \"aarch64\" == \"x86_64\" ]; then\n  bash build-scripts/build-step-x86_64.sh $PAGES_FLAG --build\nelse\n  bash build-scripts/build-step-arm64ec.sh $PAGES_FLAG --build\nfi\n"
+    - name: ccache stats (aarch64 / sdk28)
+      if: always()
+      run: ccache -s || true
+    - name: Install Proton for aarch64 (sdk28)
+      run: "PAGES_FLAG=\"\"\n{ [ \"aarch64\" = \"aarch64\" ] || [ \"28\" = \"35\" ]; } && PAGES_FLAG=\"--enable-16kb-pages\"\nif [ \"aarch64\" == \"x86_64\" ]; then\n  bash build-scripts/build-step-x86_64.sh $PAGES_FLAG --install\nelse\n  bash build-scripts/build-step-arm64ec.sh $PAGES_FLAG --install\nfi\n"
+    - name: Build the x86-64 server-browser front (aarch64 leg)
+      run: '# blsteambrowser.dll is plain x86-64 (NOT ARM64EC): loaded by lsteamclient.dll on 64-bit
+
+        # games so the browser''s hot calls stay inside the x86 JIT. See lsteamclient/bl_browser_shim.c.
+
+        TC="$HOME/toolchains/llvm-mingw-20250920-ucrt-ubuntu-22.04-x86_64/bin"
+
+        OUT="$HOME/compiled-files-aarch64/lib/wine/aarch64-windows"
+
+        "$TC/x86_64-w64-mingw32-clang" -O2 -shared -o blsteambrowser.dll lsteamclient/bl_browser_shim.c -lkernel32
+
+        file blsteambrowser.dll | grep -q ''x86-64'' || { echo "FATAL: blsteambrowser.dll is not x86-64"; file blsteambrowser.dll; exit 1; }
+
+        "$TC/llvm-objdump" -p blsteambrowser.dll | grep -q ''bl_shim_create'' || { echo "FATAL: bl_shim_create not exported"; exit 1; }
+
+        install -m 755 blsteambrowser.dll "$OUT/blsteambrowser.dll"
+
+        ls -la "$OUT/blsteambrowser.dll"
+
+        '
+    - name: Verify layer binaries for aarch64 (sdk28)
+      run: "if [ \"aarch64\" == \"x86_64\" ]; then\n  OUTPUT_DIR=\"$HOME/compiled-files-x86_64\"\nelse\n  OUTPUT_DIR=\"$HOME/compiled-files-aarch64\"\nfi\n# Every leg compiles against the android28 NDK target (true sdk28); the api_level 35\n# leg only adds 16 KB linker alignment (mirrors PAGES_FLAG in the build-step scripts).\nPAGES=4k; API=28\n{ [ \"aarch64\" = \"aarch64\" ] || [ \"28\" = \"35\" ]; } && PAGES=16k\nGE=\"\"; [ -d android/ge-patches/game-fixes ] && GE=\"--ge\"\npython3 build-scripts/verify-layer.py \"$OUTPUT_DIR\" --arch aarch64 --api $API --pages $PAGES $GE\n"
+    - name: Download prefixPack.txz for aarch64
+      run: "# Pinned to GameNative/bionic-prefix-files @ 6286ac45 (2026-05-07, the files every\n# shipped layer was built with) and sha256-checked: a push to their `main` must never\n# change what our layer ships, and a truncated download must never be packaged.\nPIN=6286ac456e4a8376e053ce1ce4f565bd37cc4af4\nif [ \"aarch64\" == \"x86_64\" ]; then\n  NAME=prefixPack-x86_64-11.txz\n  SHA=d8d1d8af905af40ae7f37114de1cf87575f88827fd8e2780cd2f92d7852a8ed0\nelse\n  NAME=prefixPack-arm64ec-11.txz\n  SHA=ade99dc80b17086a269c038c9bc50167902103a9a61df763cba4d613543ff12a\nfi\nwget --tries=5 --retry-connrefused --waitretry=10 \"https://raw.githubusercontent.com/GameNative/bionic-prefix-files/$PIN/$NAME\" -O $GITHUB_WORKSPACE/wine/prefixPack.txz\necho \"$SHA  $GITHUB_WORKSPACE/wine/prefixPack.txz\" | sha256sum -c -\n"
+    - name: Register the layer's Windows Runtime classes in the prefix pack
+      run: "# The pinned packs predate the WinRT classes this Wine adds (PropertySet, Storage.Streams,\n# DispatcherQueueController, MediaPlayer, ...); wineboot's first-launch update writes them\n# to Wow6432Node only on arm64ec, so 64-bit games could not activate them (Xbox sign-in).\n# Read the class names from this build's own DLLs and register them in both views.\nif [ \"aarch64\" == \"x86_64\" ]; then\n  OUTPUT_DIR=\"$HOME/compiled-files-x86_64\"; PE64=x86_64-windows\nelse\n  OUTPUT_DIR=\"$HOME/compiled-files-aarch64\"; PE64=aarch64-windows\nfi\npython3 android/prefixpack-winrt-registry.py $GITHUB_WORKSPACE/wine/prefixPack.txz \\\n  \"$OUTPUT_DIR/lib/wine/$PE64\" \"$OUTPUT_DIR/lib/wine/i386-windows\" prefixPack-winrt.txz\nfor k in '[Software\\\\Microsoft\\\\WindowsRuntime\\\\ActivatableClassId\\\\Windows.Foundation.Collections.PropertySet]' \\\n         '[Software\\\\Wow6432Node\\\\Microsoft\\\\WindowsRuntime\\\\ActivatableClassId\\\\Windows.Foundation.Collections.PropertySet]'; do\n\
+        \  tar -xJOf prefixPack-winrt.txz .wine/system.reg | grep -qF \"$k\" || { echo \"FATAL: $k missing from the patched pack\"; exit 1; }\ndone\nmv prefixPack-winrt.txz $GITHUB_WORKSPACE/wine/prefixPack.txz\n"
+    - name: Verify and package WoW runtime
+      run: 'set -euo pipefail
+
+        OUT="$HOME/compiled-files-aarch64"
+
+        mkdir -p "$GITHUB_WORKSPACE/runtime-result/layer/lib/wine/aarch64-windows" "$GITHUB_WORKSPACE/runtime-result/layer/lib/wine/aarch64-unix" "$GITHUB_WORKSPACE/runtime-result/layer/bin"
+
+        python3 "$GITHUB_WORKSPACE/trial/runtime/verify_runtime.py" "$OUT" | tee "$GITHUB_WORKSPACE/runtime-result/VERIFICATION.json"
+
+        cp "$OUT/lib/wine/aarch64-windows/ntdll.dll" "$GITHUB_WORKSPACE/runtime-result/layer/lib/wine/aarch64-windows/"
+
+        cp "$OUT/lib/wine/aarch64-unix/ntdll.so" "$GITHUB_WORKSPACE/runtime-result/layer/lib/wine/aarch64-unix/"
+
+        cp "$OUT/bin/wineserver" "$GITHUB_WORKSPACE/runtime-result/layer/bin/"
+
+        cp prefixPack.txz "$OUT/"
+
+        python3 - "$OUT" <<''INNER''
+
+        import json,pathlib,sys
+
+        p=pathlib.Path(sys.argv[1])
+
+        (p/''profile.json'').write_text(json.dumps(dict(type=''Proton'',versionName=''11.0-9-arm64ec'',versionCode=1,description=''WOW-PROTON11 GE11.0-9: native copyable syscalls, 100ms exit grace, Android owner. Experimental.'',files=[],wine=dict(binPath=''bin'',libPath=''lib'',prefixPack=''prefixPack.txz'')),indent=2))
+
+        INNER
+
+        tar -I ''zstd -T0 -6'' -cf "$GITHUB_WORKSPACE/runtime-result/WOW-Proton-11.0-9-arm64ec.wcp" -C "$OUT" bin lib share prefixPack.txz profile.json
+
+        git diff --binary > "$GITHUB_WORKSPACE/runtime-result/applied-source.patch"
+
+        git archive --format=tar.gz HEAD > "$GITHUB_WORKSPACE/runtime-result/proton-wine-base-source.tar.gz"
+
+        git submodule status > "$GITHUB_WORKSPACE/runtime-result/SUBMODULES.txt"
+
+        cd "$GITHUB_WORKSPACE/runtime-result"
+
+        sha256sum WOW-Proton-11.0-9-arm64ec.wcp > SHA256SUMS
+
+        '
+    - name: Upload runtime
+      uses: actions/upload-artifact@v4
+      with:
+        name: WOW-Proton11-runtime
+        path: runtime-result/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
+  apk:
+    name: Build isolated WeHavePhones P11 Lab APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    needs: runtime
+    steps:
+    - name: Checkout trial scripts
+      uses: actions/checkout@v4
+      with:
+        path: trial
+    - name: Checkout pinned WeHavePhones
+      uses: actions/checkout@v4
+      with:
+        repository: ashmerra/wehavephones
+        ref: f2319e428d8d02f2be88d4ca609bcae61f4fb469
+        path: appsrc
+        submodules: recursive
+    - name: Download tested runtime artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: WOW-Proton11-runtime
+        path: runtime-result
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+    - name: Install Android build dependencies
+      run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;22.1.7171670" "cmake;3.22.1"
+    - name: Stage isolated Proton 11 application
+      run: python3 trial/runtime/prepare_app.py appsrc runtime-result/layer runtime-result/WOW-Proton-11.0-9-arm64ec.wcp
+    - name: Build standalone debug APK
+      working-directory: appsrc
+      run: 'chmod +x gradlew scripts/*.sh
+
+        export JAVA_HOME="$JAVA_HOME_17_X64"
+
+        bash scripts/build-wehavephones.sh'
+    - name: Verify APK identity and bundled runtime
+      run: 'python3 trial/runtime/verify_apk.py appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk runtime-result/layer
+
+        "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk
+
+        "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk > runtime-result/APK-BADGING.txt
+
+        rg "package: name=.com.wehavephones.p11lab." runtime-result/APK-BADGING.txt'
+    - name: Stage tablet test kit
+      run: 'mkdir -p tablet-kit
+
+        cp appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk tablet-kit/WeHavePhones-P11-Lab.apk
+
+        cp runtime-result/WOW-Proton-11.0-9-arm64ec.wcp runtime-result/VERIFICATION.json runtime-result/APK-BADGING.txt runtime-result/applied-source.patch runtime-result/proton-wine-base-source.tar.gz runtime-result/SUBMODULES.txt tablet-kit/
+
+        cp trial/PROTON11-RU.md tablet-kit/
+
+        cp appsrc/THIRD_PARTY_NOTICES.md appsrc/LICENSE tablet-kit/
+
+        cp -r trial/runtime tablet-kit/build-scripts
+
+        cp trial/.github/workflows/Proton11.yml tablet-kit/build-scripts/
+
+        cd tablet-kit
+
+        sha256sum *.* > SHA256SUMS'
+    - name: Upload tablet test kit
+      uses: actions/upload-artifact@v4
+      with:
+        name: WOW-Proton11-tablet-kit
+        path: tablet-kit/
+        if-no-files-found: error
+        retention-days: 30
+        compression-level: 0
