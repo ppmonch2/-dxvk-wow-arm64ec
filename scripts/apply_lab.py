@@ -85,7 +85,7 @@ replace('src/d3d11/d3d11_swapchain.cpp',
     '    auto labFrame = m_labFrames.measure();\n'
     '    if (std::exchange(m_dirty, false))')
 replace('src/util/log/log.cpp',
-    'if (message.find("WOW-CUSTOM-ARM64-LAB") != std::string::npos)',
-    'if (message.find("WOW-CUSTOM-ARM64-LAB") != std::string::npos\n'
+    'if (message.find("WOW-CUSTOM-ARM64-WAIT") != std::string::npos)',
+    'if (message.find("WOW-CUSTOM-ARM64-WAIT") != std::string::npos\n'
     '           || message.find("WOW_METRICS") != std::string::npos\n'
     '           || message.find("WOW_LAB") != std::string::npos)')

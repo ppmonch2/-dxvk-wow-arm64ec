@@ -13,11 +13,9 @@ names = ('d3d11.dll', 'dxgi.dll')
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
     target = root / 'system32'; target.mkdir()
-    backup = root / 'backup'; backup.mkdir()
-    env = dict(os.environ, WOW_DXVK_TEST_TARGET=str(target), WOW_DXVK_TEST_BACKUP=str(backup))
+    env = dict(os.environ, WOW_DXVK_TEST_TARGET=str(target))
     for name in names:
         shutil.copyfile(package/'stock'/name, target/name)
-        shutil.copyfile(package/'stock'/name, backup/name)
     def run(mode, success=True):
         p = subprocess.run([str(helper), mode], env=env, text=True, capture_output=True)
         print(mode, p.returncode, p.stdout, p.stderr)
@@ -63,6 +61,29 @@ with tempfile.TemporaryDirectory() as directory:
     assert (target/'dxgi.dll').read_bytes()==b'unknown build'
     assert (target/'d3d11.dll').read_bytes()==(package/'stock/d3d11.dll').read_bytes()
     shutil.copyfile(package/'stock/dxgi.dll',target/'dxgi.dll')
-    (backup/'dxgi.dll').unlink()
-    run('install',False);equal('stock')
-print('PASS: SHA checks, install, repeat install, restore, corrupt payload, locked destination rollback, unknown DLL, missing backup')
+    # No backup folder on C: or in this test root is created or required.
+    assert not (root/'backup').exists()
+    run('install'); equal('payload')
+    # Simulate WeHavePhones restoring its original pair and deleting transient files.
+    for name in names:
+        shutil.copyfile(package/'stock'/name,target/name)
+    shutil.rmtree(package/'rollback')
+    run('install'); equal('payload')
+    run('restore'); equal('stock')
+    # Missing/corrupt bundled originals must fail before touching system32.
+    bundled=package/'stock/dxgi.dll'; content=bundled.read_bytes()
+    bundled.unlink()
+    try:
+        run('install',False)
+        assert (target/'dxgi.dll').read_bytes()==content
+    finally:
+        bundled.write_bytes(content)
+    bundled.write_bytes(content+b'corruption')
+    try:
+        run('install',False)
+        assert (target/'dxgi.dll').read_bytes()==content
+    finally:
+        bundled.write_bytes(content)
+    run('install'); equal('payload')
+    run('restore'); equal('stock')
+print('PASS: zero-setup install, repeat install, restore, reset/reinstall, corrupt payload, locked target rollback, unknown target, missing/corrupt stock')

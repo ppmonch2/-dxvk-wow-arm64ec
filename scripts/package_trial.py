@@ -32,13 +32,13 @@ source=source.replace('static const char *custom[2]',declaration+'static const c
 source=source.replace('(strcmp(previous[i], stock[i]) && strcmp(previous[i], custom[i]))',
                       '(strcmp(previous[i], stock[i]) && strcmp(previous[i], custom[i]) && strcmp(previous[i], baseline[i]) && strcmp(previous[i], priorTrial[i]))')
 source=source.replace('Custom ARM64 pair bcec80c1e075 installed and verified.',
-                      'Custom ARM64 LAB pair installed and verified.')
+                      'Custom ARM64 WAIT pair installed and verified.')
 source=source.replace('Use the verified bcec80c1e075 DLL pair.', 'Use this package verified LAB DLL pair.')
 (root/'source/dxvk-test.c').write_text(source)
 (root/'SHA256-PAYLOAD.json').write_text(json.dumps(dict(zip(names,digests)),indent=2))
 for p in Path('launcher').glob('*.bat'):
     (root/p.name).write_bytes(p.read_text().replace('\n','\r\n').encode('ascii'))
-for p in ['START-ASYNC-RU.md','PERFORMANCE-RU.md','LAB-RU.md']:
+for p in ['START-ASYNC-RU.md','PERFORMANCE-RU.md','LAB-RU.md','WAIT-RU.md']:
     shutil.copyfile(Path('launcher')/p,root/p)
 for p in ['BUILD-INFO.txt','diagnostic.patch','LICENSE-DXVK','meson-log.txt','VERIFICATION.txt']:
     shutil.copyfile(Path('out')/p,root/p)

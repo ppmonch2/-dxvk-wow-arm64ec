@@ -13,7 +13,7 @@ for name in ['d3d11.dll','dxgi.dll']:
     assert hashlib.sha256(original.b).hexdigest()==stock[name]
     assert new.imports()==original.imports(),f'{name}: imports changed; inspect before shipping'
     assert new.exports()==original.exports(),f'{name}: exports changed'
-    assert b'WOW-CUSTOM-ARM64-LAB' in new.b
+    assert b'WOW-CUSTOM-ARM64-WAIT' in new.b
     assert ('module='+name).encode() in new.b
     print(name,'SHA256, ARM64, markers and exact import/export compatibility: PASS')
 assert b'async_pipeline_scheduled' in (root/'payload/d3d11.dll').read_bytes()
@@ -22,3 +22,5 @@ assert b'WOW_LAB workers=' in (root/'payload/d3d11.dll').read_bytes()
 assert PE(root/'dxvk-test.exe').machine==0xaa64
 assert not (root/'dxvk-test-check.exe').exists()
 print('ARM64 installer and async execution marker: PASS')
+
+assert b'WOW_DXGI_METRICS' in (root/'payload/dxgi.dll').read_bytes()

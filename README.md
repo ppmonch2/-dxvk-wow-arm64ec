@@ -1,20 +1,37 @@
-# DXVK 2.3.1 ARM64 LAB
+# WAIT: уточнение источника рывков
 
-Native ARM64 test build with compatible GPLAsync, optional high-priority pipeline
-job coalescing, optional compiler worker caps, and five-second CPU Present/worker
-summaries. Main and earlier diagnostic/async branches remain unchanged.
+В предыдущем LAB async работал, но в 70-секундном участке без новых фоновых
+заданий около 32% интервалов превышали 50 мс. Поэтому следующий опыт измеряет
+ожидания и границу DXGI, а не обещает повышение FPS.
 
-[Trial instructions and measurement limits](TESTING-RU.md)
+Распакуйте весь пакет в отдельную папку на D: и запустите play-balanced.bat
+в тестовом контейнере. Ручные папки на C: не нужны: штатная пара для восстановления
+берётся из stock, снимок текущей пары создаётся в rollback рядом с запускатором.
+Установщик допускает штатную пару, bcec80c1e075 и предыдущий LAB 5d1041de0774.
+WINEDEBUG=-all; остальные настройки и маршрут сохраните.
 
-All behavior changes have explicit switches. Profiles isolate async, coalescing
-and a cap of four compiler workers. Metrics are optional and never write per frame.
-High-priority keys include both pipeline identity and the entire pipeline state;
-low/normal work is intentionally not coalesced. Completed keys are removed under
-the existing queue lock, so future requests can retry normally.
+HUD: WOW-CUSTOM-ARM64-WAIT [<12 символов коммита из BUILD-INFO.txt>].
+В начале dxgi.log должно быть WOW_WAIT enabled=1 CPU_TIMINGS_ONLY.
+После минуты в мире походите и повращайте камеру 60-90 секунд. Сохраните оба
+журнала из logs\balanced. Сводки, как прежде, пишутся раз в пять секунд.
 
-CI tests histogram math, distinct pipeline/state identity and concurrent duplicate
-submission to the pending-key registry. It compiles ARM64 DLLs, audits imports and
-exports, and tests deployment/rollback on Windows, including both earlier builds.
-This does not execute the graphics code on a GPU or establish tablet performance.
+Новые поля:
+- map_*: полная длительность вызовов D3D11 Map, включая вложенные ожидания.
+- cs_*: ожидание командного потока, когда нужная последовательность ещё не завершена.
+- resource_*: вызовы ожидания GPU-ресурса.
+- idle_us_total: ожидание устройства в SynchronizeDevice.
+- query_calls_total/query_notready_total: сколько запросов GetData вернули S_FALSE.
+- WOW_DXGI_METRICS в dxgi.log: внешний Present, ожидания оконной и буферной блокировок.
+- at_us: общий монотонный момент конца окна для сопоставления двух журналов.
 
-[Patch origin](patches/PROVENANCE.md). No APK, driver, FEX or working container changes.
+Поля с total — накопительные; сравнивать нужно их приращения. Map включает
+CS/resource ожидания: их нельзя складывать с Map как независимые времена.
+Это длительность вызовов CPU, не аппаратные таймеры GPU. Счётчики разных DLL
+раздельны: очереди компиляции смотрим в d3d11.log, блокировки DXGI — в dxgi.log.
+
+Дополнительные таймеры в Map могут влиять на результат. Их можно отключить
+через WOW_DXVK_WAITS=0 в копии BAT-файла; исходные метрики управляются отдельно
+через WOW_DXVK_METRICS. Ожидания, барьеры и семантика Map не отключаются.
+
+При проблемах restore-stock.bat вернёт оригинальные DLL из stock.
+Ускорение этой диагностической итерации не заявляется.

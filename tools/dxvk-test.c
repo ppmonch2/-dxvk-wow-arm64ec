@@ -27,7 +27,7 @@ static int path(wchar_t *out, const wchar_t *dir, const wchar_t *name) {
 static int hash_file(const wchar_t *file, char out[65]) {
   HCRYPTPROV prov = 0; HCRYPTHASH hash = 0;
   HANDLE h = INVALID_HANDLE_VALUE; BYTE buf[16384], digest[32];
-  DWORD got, size = sizeof(digest); int ok = 0;
+  DWORD got, size = sizeof(digest), failure = ERROR_SUCCESS; int ok = 0;
   if (!CryptAcquireContextW(&prov, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) goto end;
   if (!CryptCreateHash(prov, CALG_SHA_256, 0, 0, &hash)) goto end;
   h = CreateFileW(file, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -41,9 +41,11 @@ static int hash_file(const wchar_t *file, char out[65]) {
   for (DWORD i = 0; i < size; i++) sprintf(out + 2 * i, "%02x", digest[i]);
   out[64] = 0; ok = 1;
 end:
+  if (!ok) failure = GetLastError();
   if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
   if (hash) CryptDestroyHash(hash);
   if (prov) CryptReleaseContext(prov, 0);
+  if (!ok) SetLastError(failure);
   return ok;
 }
 
@@ -73,11 +75,10 @@ int wmain(int argc, wchar_t **argv) {
   if (!GetModuleFileNameW(NULL, base, MAX_PATH)) return 2;
   wchar_t *slash = wcsrchr(base, L'\\'); if (!slash) return 2; *slash = 0;
   if (!GetSystemDirectoryW(target, MAX_PATH)) return 2;
-  wcscpy(backup, L"C:\\DXVK-backup");
+  if (!path(backup, base, L"stock")) return 2;
 #ifdef TESTING
   /* Compiled ONLY into the unpublished Windows smoke-test executable. */
-  if (!GetEnvironmentVariableW(L"WOW_DXVK_TEST_TARGET", target, MAX_PATH) ||
-      !GetEnvironmentVariableW(L"WOW_DXVK_TEST_BACKUP", backup, MAX_PATH)) return 2;
+  if (!GetEnvironmentVariableW(L"WOW_DXVK_TEST_TARGET", target, MAX_PATH)) return 2;
 #endif
   path(temp, base, L"rollback");
   int status = !wcscmp(argv[1], L"status");
@@ -95,8 +96,16 @@ int wmain(int argc, wchar_t **argv) {
   if (status) return 0;
   if (game_running()) { puts("Close WoW and addon apps before replacing DLLs."); return 1; }
   for (int i = 0; i < 2; i++) {
-    if (!matches(old[i], stock[i])) {
-      puts("Verified stock backups required in C:\\DXVK-backup. See START-RU.md; TEST container only."); return 1;
+    char stockHash[65];
+    if (!hash_file(old[i], stockHash)) {
+      DWORD error = GetLastError();
+      wprintf(L"Cannot read bundled stock DLL: %ls (Windows error 0x%08lx)\n", old[i], error);
+      return 1;
+    }
+    if (strcmp(stockHash, stock[i])) {
+      wprintf(L"Bundled stock checksum mismatch: %ls\n", old[i]);
+      printf("Expected %s, got %s\n", stock[i], stockHash);
+      return 1;
     }
     if (!restore && !matches(src[i], custom[i])) {
       puts("Payload checksum mismatch. Use the verified bcec80c1e075 DLL pair."); return 1;

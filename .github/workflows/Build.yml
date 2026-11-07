@@ -1,10 +1,10 @@
 
-name: Build ARM64 async and queue lab
+name: Build ARM64 wait profiling trial
 
 on:
   workflow_dispatch:
   push:
-    branches: ['experiment/wow-arm64-lab']
+    branches: ['experiment/wow-arm64-waits']
 
 permissions:
   contents: read
@@ -50,6 +50,7 @@ jobs:
           python3 scripts/apply_async.py dxvk --build-id "$GITHUB_SHA"
           python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
           python3 scripts/apply_lab.py dxvk
+          python3 scripts/apply_waits.py dxvk
           git -C dxvk add -N src/dxvk/lab_stats.h src/dxvk/wow_metrics.h
           git -C dxvk diff --check
           git -C dxvk diff > diagnostic.patch
@@ -106,7 +107,7 @@ jobs:
           cp diagnostic.patch out/
           cp dxvk/LICENSE out/LICENSE-DXVK
           {
-            echo "Marker: WOW-CUSTOM-ARM64-LAB"
+            echo "Marker: WOW-CUSTOM-ARM64-WAIT"
             echo "Repository commit: $GITHUB_SHA"
             echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
             echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
@@ -127,8 +128,8 @@ jobs:
       - name: Download previous async trial for upgrade checks
         uses: actions/download-artifact@v4
         with:
-          name: WOW-DXVK-ARM64-ASYNC-dee2a743418fe7b90eabf961cc4f4aeb513da05c
-          run-id: 42415012735
+          name: WOW-DXVK-ARM64-LAB-5d1041de07749b902cd1adbd4cfd43e87a454674
+          run-id: 42416667340
           github-token: ${{ github.token }}
           path: previous
       - name: Package trial and build matching native installer
@@ -173,7 +174,7 @@ jobs:
           'Installer Windows tests: PASS. Tablet async trial: NOT YET TESTED.' | Out-File -Encoding utf8 package/TEST-RESULTS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WOW-DXVK-ARM64-LAB-${{ github.sha }}
+          name: WOW-DXVK-ARM64-WAIT-${{ github.sha }}
           path: package/
           retention-days: 30
           if-no-files-found: error
