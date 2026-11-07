@@ -1,10 +1,10 @@
 
-name: Build ARM64 GPLAsync on-off trial
+name: Build ARM64 async and queue lab
 
 on:
   workflow_dispatch:
   push:
-    branches: ['experiment/wow-arm64-gplasync']
+    branches: ['experiment/wow-arm64-lab']
 
 permissions:
   contents: read
@@ -17,6 +17,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Test histogram math and concurrent pending-key coalescing
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread tests/lab_stats.cpp -o lab-tests
+          ./lab-tests
 
       - name: Install dependencies
         run: |
@@ -44,6 +49,8 @@ jobs:
           test "$(git -C dxvk rev-parse HEAD)" = "037d0fa1ad093065b18dad968d5898cbcd143e0e"
           python3 scripts/apply_async.py dxvk --build-id "$GITHUB_SHA"
           python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
+          python3 scripts/apply_lab.py dxvk
+          git -C dxvk add -N src/dxvk/lab_stats.h src/dxvk/wow_metrics.h
           git -C dxvk diff --check
           git -C dxvk diff > diagnostic.patch
 
@@ -99,7 +106,7 @@ jobs:
           cp diagnostic.patch out/
           cp dxvk/LICENSE out/LICENSE-DXVK
           {
-            echo "Marker: WOW-CUSTOM-ARM64-ASYNC"
+            echo "Marker: WOW-CUSTOM-ARM64-LAB"
             echo "Repository commit: $GITHUB_SHA"
             echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
             echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
@@ -117,6 +124,13 @@ jobs:
           run-id: 42409437829
           github-token: ${{ github.token }}
           path: package/baseline
+      - name: Download previous async trial for upgrade checks
+        uses: actions/download-artifact@v4
+        with:
+          name: WOW-DXVK-ARM64-ASYNC-dee2a743418fe7b90eabf961cc4f4aeb513da05c
+          run-id: 42415012735
+          github-token: ${{ github.token }}
+          path: previous
       - name: Package trial and build matching native installer
         run: |
           curl -fL --retry 3 -o stock.tzst https://raw.githubusercontent.com/ashmerra/wehavephones/f2319e428d8d02f2be88d4ca609bcae61f4fb469/app/src/main/assets/dxwrapper/aarch64/dxvk-2.3.1.tzst
@@ -125,9 +139,10 @@ jobs:
           python3 scripts/package_trial.py
           aarch64-w64-mingw32-clang -O2 -Wall -Wextra -Werror -municode -static package/source/dxvk-test.c -o package/dxvk-test.exe -ladvapi32
           python3 scripts/check_trial.py package
+          cp -r previous/payload package/previous
       - uses: actions/upload-artifact@v4
         with:
-          name: async-stage-${{ github.sha }}
+          name: lab-stage-${{ github.sha }}
           path: package/
           retention-days: 3
           if-no-files-found: error
@@ -138,7 +153,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: async-stage-${{ github.sha }}
+          name: lab-stage-${{ github.sha }}
           path: package
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Compile unpublished x64 installer for tests
@@ -154,10 +169,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Remove-Item package/rollback -Recurse
           Remove-Item package/baseline -Recurse
+          Remove-Item package/previous -Recurse
           'Installer Windows tests: PASS. Tablet async trial: NOT YET TESTED.' | Out-File -Encoding utf8 package/TEST-RESULTS.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: WOW-DXVK-ARM64-ASYNC-${{ github.sha }}
+          name: WOW-DXVK-ARM64-LAB-${{ github.sha }}
           path: package/
           retention-days: 30
           if-no-files-found: error

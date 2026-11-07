@@ -15,3 +15,7 @@ and diagnostic log records flushed. The combined applied diff is shipped.
 When enabled, async can skip draws while compatible pipelines are compiling.
 This may reduce compilation stalls but can cause temporary visual omissions.
 This is a test build, not a claim of improved mean FPS or proven game compatibility.
+
+LAB additions in scripts/apply_lab.py and patches/lab: optional High-only pending-job
+coalescing, compiler worker caps, optional CPU Present histograms and worker counters.
+These summaries are not GPU timestamps. DLL identity is WOW-CUSTOM-ARM64-LAB.

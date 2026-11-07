@@ -35,6 +35,11 @@ with tempfile.TemporaryDirectory() as directory:
             shutil.copyfile(package/'baseline'/name,target/name)
         run('install'); equal('payload')
         run('restore'); equal('stock')
+    if (package/'previous').exists():
+        for name in names:
+            shutil.copyfile(package/'previous'/name,target/name)
+        run('install'); equal('payload')
+        run('restore'); equal('stock')
     # Bad payload must fail before either destination is touched.
     payload = package/'payload/dxgi.dll'; original = payload.read_bytes()
     payload.write_bytes(original+b'corruption')

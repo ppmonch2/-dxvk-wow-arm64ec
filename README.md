@@ -1,20 +1,20 @@
-# DXVK 2.3.1 ARM64 — GPLAsync experiment
+# DXVK 2.3.1 ARM64 LAB
 
-This branch changes pipeline compilation code using the version-matched
-Ph42oN GPLAsync 2.3.1-1 patch, on upstream commit
-037d0fa1ad093065b18dad968d5898cbcd143e0e. Native ARM64 (0xAA64), not ARM64EC.
+Native ARM64 test build with compatible GPLAsync, optional high-priority pipeline
+job coalescing, optional compiler worker caps, and five-second CPU Present/worker
+summaries. Main and earlier diagnostic/async branches remain unchanged.
 
-The existing baseline bcec80c1e075 is retained in experiment/wow-custom-arm64-native.
-Main remains untouched. Changes: explicit async opt-in/out, disabled separate GPLAsync
-cache option, atomic shared compiler flag, and one-time async execution diagnostics.
+[Trial instructions and measurement limits](TESTING-RU.md)
 
-The package includes a checksum-verified installer, original rollback pair,
-play-async-on.bat and play-async-off.bat for the SAME compiled DLLs.
-Compiled DLL import/export tables must match the proven original ARM64 libraries.
-Windows CI tests install, restore, upgrade from baseline and failure handling.
+All behavior changes have explicit switches. Profiles isolate async, coalescing
+and a cap of four compiler workers. Metrics are optional and never write per frame.
+High-priority keys include both pipeline identity and the entire pipeline state;
+low/normal work is intentionally not coalesced. Completed keys are removed under
+the existing queue lock, so future requests can retry normally.
 
-[Instructions](TESTING-RU.md) · [Patch provenance](patches/PROVENANCE.md)
+CI tests histogram math, distinct pipeline/state identity and concurrent duplicate
+submission to the pending-key registry. It compiles ARM64 DLLs, audits imports and
+exports, and tests deployment/rollback on Windows, including both earlier builds.
+This does not execute the graphics code on a GPU or establish tablet performance.
 
-No tablet performance or stability improvement is claimed before runtime testing.
-Async may omit draws while their pipelines are being compiled. Its primary target
-is shader compilation stalls, not the steady-state 32–35 FPS limit.
+[Patch origin](patches/PROVENANCE.md). No APK, driver, FEX or working container changes.
