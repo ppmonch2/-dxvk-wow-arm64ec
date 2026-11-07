@@ -1,0 +1,84 @@
+name: Package tested ARM64 DXVK launcher
+on:
+  workflow_dispatch:
+  push:
+    branches: ['experiment/wow-launcher']
+    paths:
+      - 'tools/**'
+      - 'launcher/**'
+      - '.github/workflows/Launcher.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified native DXVK pair
+        uses: actions/download-artifact@v4
+        with:
+          name: dxvk-2.3.1-WOW-CUSTOM-ARM64-NATIVE-bcec80c1e07531af49cdb169d378c982b7fc42ab
+          run-id: 42409437829
+          github-token: ${{ github.token }}
+          path: package/payload
+      - name: Download toolchain and build native ARM64 helper
+        run: |
+          curl -fL --retry 3 -o toolchain.tar.xz https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
+          tar -xf toolchain.tar.xz
+          llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64/bin/aarch64-w64-mingw32-clang \
+            -O2 -Wall -Wextra -Werror -municode -static tools/dxvk-test.c \
+            -o package/dxvk-test.exe -ladvapi32
+      - name: Package stock rollback pair and launch files
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          curl -fL --retry 3 -o stock.tzst https://raw.githubusercontent.com/ashmerra/wehavephones/f2319e428d8d02f2be88d4ca609bcae61f4fb469/app/src/main/assets/dxwrapper/aarch64/dxvk-2.3.1.tzst
+          mkdir -p stock-unpack package/stock package/logs package/source
+          tar --zstd -xf stock.tzst -C stock-unpack
+          find stock-unpack -name d3d11.dll -exec cp {} package/stock/ \;
+          find stock-unpack -name dxgi.dll -exec cp {} package/stock/ \;
+          python3 tools/check_package.py package
+          cp tools/dxvk-test.c package/source/
+          cp launcher/*.md package/
+          python3 - <<'PY'
+          from pathlib import Path
+          for source in Path('launcher').glob('*.bat'):
+              (Path('package')/source.name).write_bytes(source.read_text().replace('\n','\r\n').encode('ascii'))
+          PY
+          echo "Launcher source commit: $GITHUB_SHA" > package/LAUNCHER-BUILD.txt
+          echo "DXVK DLL build retained: bcec80c1e07531af49cdb169d378c982b7fc42ab" >> package/LAUNCHER-BUILD.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher-stage-${{ github.sha }}
+          path: package/
+          retention-days: 3
+          if-no-files-found: error
+  test-and-publish:
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: launcher-stage-${{ github.sha }}
+          path: package
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Compile unpublished x64 helper for Windows filesystem tests
+        shell: cmd
+        run: cl /nologo /W4 /DTESTING tools\dxvk-test.c /Fepackage\dxvk-test-check.exe advapi32.lib
+      - name: Exercise install, restore and failure handling
+        shell: pwsh
+        run: |
+          python tools/test_launcher.py package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item package/dxvk-test-check.exe
+          python tools/check_package.py package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          'Windows filesystem smoke tests: PASS. Tablet/Wine helper execution: not yet tested.' | Out-File -Encoding utf8 package/LAUNCHER-TESTS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WOW-DXVK-test-launcher-${{ github.sha }}
+          path: package/
+          retention-days: 30
+          if-no-files-found: error
