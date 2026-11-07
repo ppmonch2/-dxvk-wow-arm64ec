@@ -1,10 +1,10 @@
 
-name: DXVK ARM64EC diagnostic build
+name: DXVK ARM64 native diagnostic build
 
 on:
   workflow_dispatch:
   push:
-    branches: ['experiment/wow-custom-arm64ec-marker']
+    branches: ['experiment/wow-custom-arm64-native']
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git curl wget unzip xz-utils meson ninja-build python3 pkg-config
 
-      - name: Install LLVM-MinGW ARM64EC
+      - name: Install LLVM-MinGW ARM64 native
         run: |
           wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
           tar -xf llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
@@ -80,37 +80,38 @@ jobs:
 
       - name: Cross compile diagnostic DLLs
         run: |
-          meson setup dxvk/build-arm64ec dxvk \
-            --cross-file "$GITHUB_WORKSPACE/arm64ec.txt" \
+          meson setup dxvk/build-arm64-native dxvk \
+            --cross-file "$GITHUB_WORKSPACE/arm64-native.txt" \
             -Dbuildtype=release
-          ninja -C dxvk/build-arm64ec -j 2
+          ninja -C dxvk/build-arm64-native -j 2 src/d3d11/d3d11.dll src/dxgi/dxgi.dll
 
       - name: Verify and package diagnostic DLLs
         run: |
           mkdir -p out
-          cp dxvk/build-arm64ec/src/d3d11/d3d11.dll out/
-          cp dxvk/build-arm64ec/src/dxgi/dxgi.dll out/
-          python3 scripts/verify_dlls.py out | tee out/VERIFICATION.txt
+          cp dxvk/build-arm64-native/src/d3d11/d3d11.dll out/
+          cp dxvk/build-arm64-native/src/dxgi/dxgi.dll out/
+          python3 scripts/verify_dlls.py out > out/VERIFICATION.txt
+          cat out/VERIFICATION.txt
           llvm-readobj --file-headers --coff-load-config out/d3d11.dll out/dxgi.dll > out/PE-HEADERS.txt
           cp TESTING-RU.md out/
           cp diagnostic.patch out/
           cp dxvk/LICENSE out/LICENSE-DXVK
           {
-            echo "Marker: WOW-CUSTOM-ARM64EC"
+            echo "Marker: WOW-CUSTOM-ARM64-NATIVE"
             echo "Repository commit: $GITHUB_SHA"
             echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
-            echo "LLVM-MinGW: 20251104 ucrt ARM64EC"
+            echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "Runtime on Xiaomi Pad 6: NOT TESTED"
             echo "GPLAsync: not included; performance changes: none"
           } > out/BUILD-INFO.txt
           (cd out && sha256sum d3d11.dll dxgi.dll > SHA256SUMS)
-          cp dxvk/build-arm64ec/meson-logs/meson-log.txt out/
+          cp dxvk/build-arm64-native/meson-logs/meson-log.txt out/
 
       - name: Upload diagnostic ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dxvk-2.3.1-WOW-CUSTOM-ARM64EC-${{ github.sha }}
+          name: dxvk-2.3.1-WOW-CUSTOM-ARM64-NATIVE-${{ github.sha }}
           path: out/
           if-no-files-found: error
           retention-days: 30

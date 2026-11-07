@@ -9,7 +9,7 @@ parser.add_argument("--build-id", required=True)
 args = parser.parse_args()
 if not args.build_id.isalnum():
     raise SystemExit("Build ID must be alphanumeric")
-marker = "WOW-CUSTOM-ARM64EC"
+marker = "WOW-CUSTOM-ARM64-NATIVE"
 build = args.build_id[:12]
 
 def replace(path, before, after):
@@ -35,3 +35,9 @@ replace("src/dxgi/dxgi_main.cpp",
         '  HRESULT createDxgiFactory(UINT Flags, REFIID riid, void **ppFactory) {',
         '  HRESULT createDxgiFactory(UINT Flags, REFIID riid, void **ppFactory) {\n'
         f'    Logger::info("{marker} build={build} module=dxgi.dll createDxgiFactory");')
+
+# Also cover D3D11CoreCreateDevice callers that bypass the public entry points.
+replace("src/d3d11/d3d11_main.cpp",
+        "    Rc<DxvkAdapter>  dxvkAdapter;",
+        f'    Logger::info("{marker} build={build} module=d3d11.dll D3D11InternalCreateDevice");\n'
+        "    Rc<DxvkAdapter>  dxvkAdapter;")
