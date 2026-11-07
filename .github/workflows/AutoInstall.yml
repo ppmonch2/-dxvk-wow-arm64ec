@@ -1,0 +1,75 @@
+name: Build zero-setup LAB installer
+on:
+  workflow_dispatch:
+  push:
+    branches: ['experiment/wow-arm64-auto-install']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: WOW-DXVK-ARM64-LAB-5d1041de07749b902cd1adbd4cfd43e87a454674
+          run-id: 42416667340
+          github-token: ${{ github.token }}
+          path: package
+      - name: Build native ARM64 installer only
+        run: |
+          curl -fL --retry 3 -o toolchain.tar.xz https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
+          tar -xf toolchain.tar.xz
+          llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64/bin/aarch64-w64-mingw32-clang \
+            -O2 -Wall -Wextra -Werror -municode -static tools/dxvk-auto.c \
+            -o package/dxvk-test.exe -ladvapi32
+          cp tools/dxvk-auto.c package/source/dxvk-test.c
+          cp START-RU.md package/
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ['LAB-RU.md','START-ASYNC-RU.md']:
+              p=Path('package')/name
+              s=p.read_text().replace('Сохраните C:\\DXVK-backup\nс оригинальной парой.',
+                  'Дополнительная папка на C: не нужна: установщик использует проверенную пару из stock.')
+              s=s.replace('с оригинальными DLL в C:\\DXVK-backup','с оригинальными DLL в stock')
+              p.write_text(s)
+          PY
+          echo "Installer source: $GITHUB_SHA" > package/INSTALLER-BUILD.txt
+          echo "DXVK DLLs retained unchanged: 5d1041de07749b902cd1adbd4cfd43e87a454674" >> package/INSTALLER-BUILD.txt
+          python3 tools/check_auto.py package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auto-stage-${{ github.sha }}
+          path: package/
+          retention-days: 3
+          if-no-files-found: error
+  test-and-publish:
+    needs: package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: auto-stage-${{ github.sha }}
+          path: package
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Compile unpublished filesystem test executable
+        shell: cmd
+        run: cl /nologo /W4 /DTESTING tools\dxvk-auto.c /Fepackage\dxvk-test-check.exe advapi32.lib
+      - name: Test first install without C backup, reset, restore and failures
+        shell: pwsh
+        run: |
+          python tools/test_auto.py package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item package/dxvk-test-check.exe
+          python tools/check_auto.py package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item package/rollback -Recurse
+          'PASS: first install without backup, repeat, reset/reinstall, restore and failure handling. Wine tablet test pending.' | Out-File -Encoding utf8 package/INSTALLER-TESTS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WOW-DXVK-LAB-AUTO-${{ github.sha }}
+          path: package/
+          retention-days: 30
+          if-no-files-found: error
