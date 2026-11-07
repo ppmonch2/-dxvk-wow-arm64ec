@@ -1,13 +1,14 @@
 
-name: DXVK ARM64 native diagnostic build
+name: Build ARM64 GPLAsync on-off trial
 
 on:
   workflow_dispatch:
   push:
-    branches: ['experiment/wow-custom-arm64-native']
+    branches: ['experiment/wow-arm64-gplasync']
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   build:
@@ -20,7 +21,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git curl wget unzip xz-utils meson ninja-build python3 pkg-config
+          sudo apt-get install -y git curl wget unzip xz-utils meson ninja-build python3 pkg-config zstd
 
       - name: Install LLVM-MinGW ARM64 native
         run: |
@@ -41,6 +42,7 @@ jobs:
       - name: Apply runtime diagnostics
         run: |
           test "$(git -C dxvk rev-parse HEAD)" = "037d0fa1ad093065b18dad968d5898cbcd143e0e"
+          python3 scripts/apply_async.py dxvk --build-id "$GITHUB_SHA"
           python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
           git -C dxvk diff --check
           git -C dxvk diff > diagnostic.patch
@@ -97,22 +99,65 @@ jobs:
           cp diagnostic.patch out/
           cp dxvk/LICENSE out/LICENSE-DXVK
           {
-            echo "Marker: WOW-CUSTOM-ARM64-NATIVE"
+            echo "Marker: WOW-CUSTOM-ARM64-ASYNC"
             echo "Repository commit: $GITHUB_SHA"
             echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
             echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
             echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "Runtime on Xiaomi Pad 6: NOT TESTED"
-            echo "GPLAsync: not included; performance changes: none"
+            echo "GPLAsync: 2.3.1-1; DXVK_ASYNC=1 enables, 0 disables; gplAsyncCache disabled"
           } > out/BUILD-INFO.txt
           (cd out && sha256sum d3d11.dll dxgi.dll > SHA256SUMS)
           cp dxvk/build-arm64-native/meson-logs/meson-log.txt out/
 
-      - name: Upload diagnostic ZIP artifact
-        uses: actions/upload-artifact@v4
+      - name: Download verified baseline for upgrade tests
+        uses: actions/download-artifact@v4
         with:
-          name: dxvk-2.3.1-WOW-CUSTOM-ARM64-NATIVE-${{ github.sha }}
-          path: out/
+          name: dxvk-2.3.1-WOW-CUSTOM-ARM64-NATIVE-bcec80c1e07531af49cdb169d378c982b7fc42ab
+          run-id: 42409437829
+          github-token: ${{ github.token }}
+          path: package/baseline
+      - name: Package trial and build matching native installer
+        run: |
+          curl -fL --retry 3 -o stock.tzst https://raw.githubusercontent.com/ashmerra/wehavephones/f2319e428d8d02f2be88d4ca609bcae61f4fb469/app/src/main/assets/dxwrapper/aarch64/dxvk-2.3.1.tzst
+          mkdir -p stock-unpack
+          tar --zstd -xf stock.tzst -C stock-unpack
+          python3 scripts/package_trial.py
+          aarch64-w64-mingw32-clang -O2 -Wall -Wextra -Werror -municode -static package/source/dxvk-test.c -o package/dxvk-test.exe -ladvapi32
+          python3 scripts/check_trial.py package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: async-stage-${{ github.sha }}
+          path: package/
+          retention-days: 3
           if-no-files-found: error
+  test-and-publish:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: async-stage-${{ github.sha }}
+          path: package
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Compile unpublished x64 installer for tests
+        shell: cmd
+        run: cl /nologo /W4 /DTESTING package\source\dxvk-test.c /Fepackage\dxvk-test-check.exe advapi32.lib
+      - name: Test installer and validate binary compatibility
+        shell: pwsh
+        run: |
+          python tools/test_launcher.py package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item package/dxvk-test-check.exe
+          python scripts/check_trial.py package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item package/rollback -Recurse
+          Remove-Item package/baseline -Recurse
+          'Installer Windows tests: PASS. Tablet async trial: NOT YET TESTED.' | Out-File -Encoding utf8 package/TEST-RESULTS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WOW-DXVK-ARM64-ASYNC-${{ github.sha }}
+          path: package/
           retention-days: 30
-
+          if-no-files-found: error
