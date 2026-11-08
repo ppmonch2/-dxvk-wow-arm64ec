@@ -1,0 +1,53 @@
+[
+  {
+    "commit": "80fb7e22",
+    "applies": false,
+    "details": [
+      "error: patch failed: src/d3d11/d3d11_context_imm.cpp:18",
+      "error: src/d3d11/d3d11_context_imm.cpp: patch does not apply",
+      "error: patch failed: src/d3d11/d3d11_context_imm.h:208",
+      "error: src/d3d11/d3d11_context_imm.h: patch does not apply",
+      "error: patch failed: src/d3d9/d3d9_device.cpp:58",
+      "error: src/d3d9/d3d9_device.cpp: patch does not apply"
+    ]
+  },
+  {
+    "commit": "a1456344",
+    "applies": false,
+    "details": [
+      "error: patch failed: src/d3d11/d3d11_context.cpp:927",
+      "error: src/d3d11/d3d11_context.cpp: patch does not apply",
+      "error: patch failed: src/d3d11/d3d11_context_imm.cpp:1170",
+      "error: src/d3d11/d3d11_context_imm.cpp: patch does not apply",
+      "error: patch failed: src/d3d11/d3d11_context_imm.h:131",
+      "error: src/d3d11/d3d11_context_imm.h: patch does not apply"
+    ]
+  },
+  {
+    "commit": "e3d3f69f",
+    "applies": false,
+    "details": [
+      "error: patch failed: src/dxvk/dxvk_device.cpp:731",
+      "error: src/dxvk/dxvk_device.cpp: patch does not apply",
+      "error: patch failed: src/dxvk/dxvk_device.h:45",
+      "error: src/dxvk/dxvk_device.h: patch does not apply",
+      "error: patch failed: src/dxvk/dxvk_memory.cpp:2178",
+      "error: src/dxvk/dxvk_memory.cpp: patch does not apply"
+    ]
+  },
+  {
+    "commit": "35d94ae0",
+    "applies": true,
+    "details": []
+  },
+  {
+    "commit": "fcabffc1",
+    "applies": false,
+    "details": [
+      "error: patch failed: src/dxvk/dxvk_context.cpp:7266",
+      "error: src/dxvk/dxvk_context.cpp: patch does not apply",
+      "error: patch failed: src/dxvk/dxvk_context.h:1808",
+      "error: src/dxvk/dxvk_context.h: patch does not apply"
+    ]
+  }
+]
