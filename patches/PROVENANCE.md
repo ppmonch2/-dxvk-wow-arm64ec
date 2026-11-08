@@ -19,3 +19,8 @@ This is a test build, not a claim of improved mean FPS or proven game compatibil
 LAB additions in scripts/apply_lab.py and patches/lab: optional High-only pending-job
 coalescing, compiler worker caps, optional CPU Present histograms and worker counters.
 These summaries are not GPU timestamps. DLL identity is WOW-CUSTOM-ARM64-LAB.
+
+
+TILER adaptation: upstream DXVK commits 80fb7e2294768e47af1a84ccd47d93dfbed839bb
+and a145634438fef9ec99878fa5ebdf0a79d8f4754f (zlib license, upstream DXVK authors).
+Adapted manually to 2.3.1. New path off by default; no explicit Flush suppression.

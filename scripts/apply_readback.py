@@ -93,7 +93,7 @@ replace('src/d3d11/d3d11_context_imm.cpp',
     if (lab::metricsEnabled()) lab::readbackSubmits.fetch_add(1, std::memory_order_relaxed);
     static std::atomic<bool> logged {false};
     if (!logged.exchange(true, std::memory_order_relaxed))
-      Logger::info("WOW-CUSTOM-ARM64-RB early_readback_submit max_per_frame=1");
+      Logger::info("WOW-CUSTOM-ARM64-TILER early_readback_submit max_per_frame=1");
   }
 
   bool D3D11ImmediateContext::WaitForResource(''')

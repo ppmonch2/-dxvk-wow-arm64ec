@@ -1,181 +1,172 @@
-
-name: Build ARM64 early readback trial
-
-on:
-  workflow_dispatch:
-  push:
-    branches: ['experiment/wow-arm64-readback']
-
+name: Build native ARM64 tiler flush trial
 permissions:
   contents: read
   actions: read
-
 jobs:
   build:
     runs-on: ubuntu-24.04
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Test histogram math and concurrent pending-key coalescing
+      run: |
+        g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread tests/lab_stats.cpp -o lab-tests
+        ./lab-tests
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git curl wget unzip xz-utils meson ninja-build python3 pkg-config zstd
+    - name: Install LLVM-MinGW ARM64 native
+      run: |
+        wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
+        tar -xf llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
+        echo "$PWD/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64/bin" >> "$GITHUB_PATH"
+    - name: Install glslang
+      run: |
+        wget -q https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-linux-Release.zip
+        unzip -q glslang-master-linux-Release.zip -d glslang
+        echo "$PWD/glslang/bin" >> "$GITHUB_PATH"
+    - name: Checkout DXVK v2.3.1
+      run: |
+        git clone --recursive --branch v2.3.1 --depth 1 https://github.com/doitsujin/dxvk.git dxvk
+    - name: Apply runtime diagnostics
+      run: |
+        test "$(git -C dxvk rev-parse HEAD)" = "037d0fa1ad093065b18dad968d5898cbcd143e0e"
+        python3 scripts/apply_async.py dxvk --build-id "$GITHUB_SHA"
+        python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
+        python3 scripts/apply_lab.py dxvk
+        python3 scripts/apply_waits.py dxvk
+        python3 scripts/apply_readback.py dxvk
+        python3 scripts/apply_tiler.py dxvk
+        git -C dxvk add -N src/dxvk/lab_stats.h src/dxvk/wow_metrics.h src/dxvk/readback_policy.h src/dxvk/tiler_flush_policy.h
+        git -C dxvk diff --check
+        git -C dxvk diff > diagnostic.patch
+    - name: Test tiler policy and preserved mandatory flush paths
+      run: |-
+        g++ -std=c++17 -O2 -Wall -Wextra -Werror -I dxvk/src tests/tiler_policy.cpp -o tiler-policy-tests
+        ./tiler-policy-tests
+    - name: Fix duplicate D3D9 definition
+      run: |
+        python3 - <<'PY'
+        from pathlib import Path
+        import re
 
-      - name: Test histogram math and concurrent pending-key coalescing
-        run: |
-          g++ -std=c++17 -O2 -Wall -Wextra -Werror -pthread tests/lab_stats.cpp -o lab-tests
-          ./lab-tests
+        path = Path("dxvk/src/d3d9/d3d9_include.h")
+        source = path.read_text()
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git curl wget unzip xz-utils meson ninja-build python3 pkg-config zstd
+        pattern = (
+            r"typedef\s+struct\s+"
+            r"_D3DDEVINFO_RESOURCEMANAGER\s*\{"
+            r"[^{}]*\}\s*"
+            r"D3DDEVINFO_RESOURCEMANAGER"
+            r"(?:\s*,\s*\*\s*LPD3DDEVINFO_RESOURCEMANAGER)?"
+            r"\s*;"
+        )
 
-      - name: Install LLVM-MinGW ARM64 native
-        run: |
-          wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
-          tar -xf llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
-          echo "$PWD/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64/bin" >> "$GITHUB_PATH"
+        patched, count = re.subn(pattern, "", source)
 
-      - name: Install glslang
-        run: |
-          wget -q https://github.com/KhronosGroup/glslang/releases/download/master-tot/glslang-master-linux-Release.zip
-          unzip -q glslang-master-linux-Release.zip -d glslang
-          echo "$PWD/glslang/bin" >> "$GITHUB_PATH"
-
-      - name: Checkout DXVK v2.3.1
-        run: |
-          git clone --recursive --branch v2.3.1 --depth 1 https://github.com/doitsujin/dxvk.git dxvk
-
-      - name: Apply runtime diagnostics
-        run: |
-          test "$(git -C dxvk rev-parse HEAD)" = "037d0fa1ad093065b18dad968d5898cbcd143e0e"
-          python3 scripts/apply_async.py dxvk --build-id "$GITHUB_SHA"
-          python3 scripts/apply_marker.py dxvk --build-id "$GITHUB_SHA"
-          python3 scripts/apply_lab.py dxvk
-          python3 scripts/apply_waits.py dxvk
-          python3 scripts/apply_readback.py dxvk
-          git -C dxvk add -N src/dxvk/lab_stats.h src/dxvk/wow_metrics.h src/dxvk/readback_policy.h
-          git -C dxvk diff --check
-          git -C dxvk diff > diagnostic.patch
-
-      - name: Fix duplicate D3D9 definition
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("dxvk/src/d3d9/d3d9_include.h")
-          source = path.read_text()
-
-          pattern = (
-              r"typedef\s+struct\s+"
-              r"_D3DDEVINFO_RESOURCEMANAGER\s*\{"
-              r"[^{}]*\}\s*"
-              r"D3DDEVINFO_RESOURCEMANAGER"
-              r"(?:\s*,\s*\*\s*LPD3DDEVINFO_RESOURCEMANAGER)?"
-              r"\s*;"
-          )
-
-          patched, count = re.subn(pattern, "", source)
-
-          if count == 1:
-              path.write_text(patched)
-              print("Duplicate D3D9 definition removed.")
-          elif count == 0:
-              raise SystemExit(
-                  "Definition not found. Inspect d3d9_include.h."
-              )
-          else:
-              raise SystemExit(
-                  f"Unexpected number of definitions: {count}"
-              )
-          PY
-
-      - name: Cross compile diagnostic DLLs
-        run: |
-          meson setup dxvk/build-arm64-native dxvk \
-            --cross-file "$GITHUB_WORKSPACE/arm64-native.txt" \
-            -Dbuildtype=release
-          ninja -C dxvk/build-arm64-native -j 2 src/d3d11/d3d11.dll src/dxgi/dxgi.dll
-
-      - name: Verify and package diagnostic DLLs
-        run: |
-          mkdir -p out
-          cp dxvk/build-arm64-native/src/d3d11/d3d11.dll out/
-          cp dxvk/build-arm64-native/src/dxgi/dxgi.dll out/
-          python3 scripts/verify_dlls.py out > out/VERIFICATION.txt
-          cat out/VERIFICATION.txt
-          llvm-readobj --file-headers --coff-load-config out/d3d11.dll out/dxgi.dll > out/PE-HEADERS.txt
-          cp TESTING-RU.md out/
-          cp diagnostic.patch out/
-          cp dxvk/LICENSE out/LICENSE-DXVK
-          {
-            echo "Marker: WOW-CUSTOM-ARM64-RB"
-            echo "Repository commit: $GITHUB_SHA"
-            echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
-            echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo "Runtime on Xiaomi Pad 6: NOT TESTED"
-            echo "GPLAsync: 2.3.1-1; DXVK_ASYNC=1 enables, 0 disables; gplAsyncCache disabled"
-          } > out/BUILD-INFO.txt
-          (cd out && sha256sum d3d11.dll dxgi.dll > SHA256SUMS)
-          cp dxvk/build-arm64-native/meson-logs/meson-log.txt out/
-
-      - name: Download verified baseline for upgrade tests
-        uses: actions/download-artifact@v4
-        with:
-          name: dxvk-2.3.1-WOW-CUSTOM-ARM64-NATIVE-bcec80c1e07531af49cdb169d378c982b7fc42ab
-          run-id: 42409437829
-          github-token: ${{ github.token }}
-          path: package/baseline
-      - name: Download previous async trial for upgrade checks
-        uses: actions/download-artifact@v4
-        with:
-          name: WOW-DXVK-ARM64-WAIT-a0080307388c1c1b07115bdf7e93908087f9ce83
-          run-id: 42419522118
-          github-token: ${{ github.token }}
-          path: previous
-      - name: Package trial and build matching native installer
-        run: |
-          curl -fL --retry 3 -o stock.tzst https://raw.githubusercontent.com/ashmerra/wehavephones/f2319e428d8d02f2be88d4ca609bcae61f4fb469/app/src/main/assets/dxwrapper/aarch64/dxvk-2.3.1.tzst
-          mkdir -p stock-unpack
-          tar --zstd -xf stock.tzst -C stock-unpack
-          python3 scripts/package_trial.py
-          aarch64-w64-mingw32-clang -O2 -Wall -Wextra -Werror -municode -static package/source/dxvk-test.c -o package/dxvk-test.exe -ladvapi32
-          python3 scripts/check_trial.py package
-          cp -r previous/payload package/previous
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lab-stage-${{ github.sha }}
-          path: package/
-          retention-days: 3
-          if-no-files-found: error
+        if count == 1:
+            path.write_text(patched)
+            print("Duplicate D3D9 definition removed.")
+        elif count == 0:
+            raise SystemExit(
+                "Definition not found. Inspect d3d9_include.h."
+            )
+        else:
+            raise SystemExit(
+                f"Unexpected number of definitions: {count}"
+            )
+        PY
+    - name: Cross compile diagnostic DLLs
+      run: |
+        meson setup dxvk/build-arm64-native dxvk \
+          --cross-file "$GITHUB_WORKSPACE/arm64-native.txt" \
+          -Dbuildtype=release
+        ninja -C dxvk/build-arm64-native -j 2 src/d3d11/d3d11.dll src/dxgi/dxgi.dll
+    - name: Verify and package diagnostic DLLs
+      run: |
+        mkdir -p out
+        cp dxvk/build-arm64-native/src/d3d11/d3d11.dll out/
+        cp dxvk/build-arm64-native/src/dxgi/dxgi.dll out/
+        python3 scripts/verify_dlls.py out > out/VERIFICATION.txt
+        cat out/VERIFICATION.txt
+        llvm-readobj --file-headers --coff-load-config out/d3d11.dll out/dxgi.dll > out/PE-HEADERS.txt
+        cp TESTING-RU.md out/
+        cp diagnostic.patch out/
+        cp dxvk/LICENSE out/LICENSE-DXVK
+        {
+          echo "Marker: WOW-CUSTOM-ARM64-TILER"
+          echo "Repository commit: $GITHUB_SHA"
+          echo "Upstream DXVK: $(git -C dxvk rev-parse HEAD)"
+          echo "LLVM-MinGW: 20251104 ucrt ARM64 native"
+          echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "Runtime on Xiaomi Pad 6: NOT TESTED"
+          echo "GPLAsync: 2.3.1-1; DXVK_ASYNC=1 enables, 0 disables; gplAsyncCache disabled"
+        } > out/BUILD-INFO.txt
+        (cd out && sha256sum d3d11.dll dxgi.dll > SHA256SUMS)
+        cp dxvk/build-arm64-native/meson-logs/meson-log.txt out/
+    - name: Download verified baseline for upgrade tests
+      uses: actions/download-artifact@v4
+      with:
+        name: dxvk-2.3.1-WOW-CUSTOM-ARM64-NATIVE-bcec80c1e07531af49cdb169d378c982b7fc42ab
+        run-id: 42409437829
+        github-token: ${{ github.token }}
+        path: package/baseline
+    - name: Download previous async trial for upgrade checks
+      uses: actions/download-artifact@v4
+      with:
+        name: WOW-DXVK-ARM64-RB-9f30f7325564360345225db5917bfc9daa4ffb50
+        run-id: 42421156542
+        github-token: ${{ github.token }}
+        path: previous
+    - name: Package trial and build matching native installer
+      run: |
+        curl -fL --retry 3 -o stock.tzst https://raw.githubusercontent.com/ashmerra/wehavephones/f2319e428d8d02f2be88d4ca609bcae61f4fb469/app/src/main/assets/dxwrapper/aarch64/dxvk-2.3.1.tzst
+        mkdir -p stock-unpack
+        tar --zstd -xf stock.tzst -C stock-unpack
+        python3 scripts/package_trial.py
+        aarch64-w64-mingw32-clang -O2 -Wall -Wextra -Werror -municode -static package/source/dxvk-test.c -o package/dxvk-test.exe -ladvapi32
+        python3 scripts/check_trial.py package
+        cp -r previous/payload package/previous
+    - uses: actions/upload-artifact@v4
+      with:
+        name: lab-stage-${{ github.sha }}
+        path: package/
+        retention-days: 3
+        if-no-files-found: error
   test-and-publish:
     needs: build
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: lab-stage-${{ github.sha }}
-          path: package
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Compile unpublished x64 installer for tests
-        shell: cmd
-        run: cl /nologo /W4 /DTESTING package\source\dxvk-test.c /Fepackage\dxvk-test-check.exe advapi32.lib
-      - name: Test installer and validate binary compatibility
-        shell: pwsh
-        run: |
-          python tools/test_launcher.py package
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Remove-Item package/dxvk-test-check.exe
-          python scripts/check_trial.py package
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Remove-Item package/rollback -Recurse
-          Remove-Item package/baseline -Recurse
-          Remove-Item package/previous -Recurse
-          'Installer Windows tests: PASS. Tablet async trial: NOT YET TESTED.' | Out-File -Encoding utf8 package/TEST-RESULTS.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: WOW-DXVK-ARM64-RB-${{ github.sha }}
-          path: package/
-          retention-days: 30
-          if-no-files-found: error
+    - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v4
+      with:
+        name: lab-stage-${{ github.sha }}
+        path: package
+    - uses: ilammy/msvc-dev-cmd@v1
+    - name: Compile unpublished x64 installer for tests
+      shell: cmd
+      run: cl /nologo /W4 /DTESTING package\source\dxvk-test.c /Fepackage\dxvk-test-check.exe advapi32.lib
+    - name: Test installer and validate binary compatibility
+      shell: pwsh
+      run: |
+        python tools/test_launcher.py package
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Remove-Item package/dxvk-test-check.exe
+        python scripts/check_trial.py package
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        Remove-Item package/rollback -Recurse
+        Remove-Item package/baseline -Recurse
+        Remove-Item package/previous -Recurse
+        'Installer Windows tests: PASS. Tablet async trial: NOT YET TESTED.' | Out-File -Encoding utf8 package/TEST-RESULTS.txt
+    - uses: actions/upload-artifact@v4
+      with:
+        name: WOW-DXVK-ARM64-TILER-${{ github.sha }}
+        path: package/
+        retention-days: 30
+        if-no-files-found: error
+'on':
+  workflow_dispatch: null
+  push:
+    branches:
+    - experiment/wow-arm64-tiler-flush
