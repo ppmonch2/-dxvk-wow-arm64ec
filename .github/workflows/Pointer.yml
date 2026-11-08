@@ -1,0 +1,112 @@
+name: P11 Lab Android mouse pointer fix
+on:
+  push:
+    branches: ['experiment/wow-proton11']
+    paths: ['pointer/**', '.github/workflows/Pointer.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: trial
+      - name: Checkout original P11 preparation scripts
+        uses: actions/checkout@v4
+        with:
+          ref: 22da3c8330716994b4efe92f6eac4097fc9a0765
+          path: baseline
+      - name: Checkout pinned WeHavePhones source
+        uses: actions/checkout@v4
+        with:
+          repository: ashmerra/wehavephones
+          ref: f2319e428d8d02f2be88d4ca609bcae61f4fb469
+          path: appsrc
+          submodules: recursive
+      - name: Reuse verified runtime without rebuilding Wine
+        uses: actions/download-artifact@v4
+        with:
+          name: WOW-Proton11-runtime
+          run-id: 42426370537
+          github-token: ${{ github.token }}
+          path: runtime-result
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android build dependencies
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;22.1.7171670" "cmake;3.22.1"
+      - name: Restore the original P11 signing key without creating a replacement
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: wow-proton11-lab-debug-signing-v1
+          fail-on-cache-miss: true
+      - name: Verify original signing certificate
+        run: |
+          keytool -exportcert -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android -file original-cert.der
+          echo 'c64a3ca9b23da9a62ce1de32a23357966e046e4d48b18d4915f1246cc152dc76  original-cert.der' | sha256sum --check
+      - name: Apply session-only Android pointer fix and preserve runtime
+        run: |
+          mkdir -p out/source
+          python3 trial/pointer/patch_pointer.py appsrc
+          git -C appsrc diff > out/source/pointer-only.patch
+          python3 baseline/runtime/prepare_app.py appsrc runtime-result/layer runtime-result/WOW-Proton-11.0-9-arm64ec.wcp
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('appsrc/app/build.gradle')
+          s=p.read_text()
+          assert s.count('versionCode 9')==1
+          s=s.replace('versionCode 9','versionCode 10').replace("versionNameSuffix '-p11lab'", "versionNameSuffix '-p11lab-pointer1'")
+          p.write_text(s)
+          PY
+      - name: Build updated APK
+        working-directory: appsrc
+        run: |
+          chmod +x gradlew scripts/*.sh
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          bash scripts/build-wehavephones.sh
+      - name: Verify APK identity signature and original runtime
+        run: |
+          APK=appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk
+          python3 baseline/runtime/verify_apk.py "$APK" runtime-result/layer
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" > out/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > out/APK-BADGING.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('out/APK-SIGNATURE.txt').read_text()
+          assert 'Signer #1 certificate SHA-256 digest: c64a3ca9b23da9a62ce1de32a23357966e046e4d48b18d4915f1246cc152dc76' in s
+          first=Path('out/APK-BADGING.txt').read_text().splitlines()[0]
+          assert "name='com.wehavephones.p11lab'" in first and "versionCode='10'" in first
+          assert "versionName='0.0.9-p11lab-pointer1'" in first
+          print(first)
+          PY
+          cp "$APK" out/WeHavePhones-P11-Lab-PointerFix.apk
+          cp trial/pointer/START-RU.md out/
+          cp trial/pointer/patch_pointer.py baseline/runtime/prepare_app.py baseline/runtime/verify_apk.py out/source/
+          cp appsrc/LICENSE appsrc/THIRD_PARTY_NOTICES.md out/
+          cp runtime-result/applied-source.patch runtime-result/proton-wine-base-source.tar.gz runtime-result/SUBMODULES.txt out/source/
+          cp trial/.github/workflows/Pointer.yml out/source/
+          {
+            echo "Pointer patch repository commit: $GITHUB_SHA"
+            echo "App source: ashmerra/wehavephones f2319e428d8d02f2be88d4ca609bcae61f4fb469"
+            echo "P11 staging source: 22da3c8330716994b4efe92f6eac4097fc9a0765"
+            echo "Signing certificate: matches original P11 APK"
+            echo "Device pointer behaviour: NOT YET TESTED"
+          } > out/BUILD-INFO.txt
+          cd out
+          sha256sum WeHavePhones-P11-Lab-PointerFix.apk > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: P11-Lab-PointerFix-${{ github.sha }}
+          path: out/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
