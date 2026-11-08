@@ -67,6 +67,8 @@ jobs:
           s=s.replace('versionCode 9','versionCode 11').replace("versionNameSuffix '-p11lab'", "versionNameSuffix '-p11lab-pointer2'")
           p.write_text(s)
           PY
+      - name: Fetch original assets via pinned API IDs and verify upstream hashes
+        run: python3 trial/pointer/fetch_assets_api.py appsrc
       - name: Build updated APK
         working-directory: appsrc
         run: |
@@ -97,7 +99,7 @@ jobs:
           PY
           cp "$APK" out/WeHavePhones-P11-Lab-PointerFix-v2.apk
           cp trial/pointer/START-RU.md out/
-          cp trial/pointer/patch_pointer.py trial/pointer/SessionPointerFrameLayout.java baseline/runtime/prepare_app.py baseline/runtime/verify_apk.py out/source/
+          cp trial/pointer/patch_pointer.py trial/pointer/SessionPointerFrameLayout.java trial/pointer/fetch_assets_api.py trial/pointer/asset-ids.json baseline/runtime/prepare_app.py baseline/runtime/verify_apk.py out/source/
           cp appsrc/LICENSE appsrc/THIRD_PARTY_NOTICES.md out/
           cp runtime-result/applied-source.patch runtime-result/proton-wine-base-source.tar.gz runtime-result/SUBMODULES.txt out/source/
           cp trial/.github/workflows/Pointer.yml out/source/
