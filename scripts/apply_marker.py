@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed diagnostic-only patch for upstream DXVK v2.3.1."""
+"""Fail-closed diagnostic-only patch for upstream DXVK v2.7.1."""
 from pathlib import Path
 import argparse
 
@@ -9,7 +9,7 @@ parser.add_argument("--build-id", required=True)
 args = parser.parse_args()
 if not args.build_id.isalnum():
     raise SystemExit("Build ID must be alphanumeric")
-marker = "WOW-CUSTOM-ARM64-NATIVE"
+marker = "WOW-CUSTOM-ARM64-DXVK271"
 build = args.build_id[:12]
 
 def replace(path, before, after):
