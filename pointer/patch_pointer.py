@@ -1,25 +1,21 @@
-"""Hide Android's mouse pointer only on the session views; preserve X11 cursor."""
+"""Use a transparent custom pointer resolved by the root of the game area."""
 from pathlib import Path
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 app=Path(sys.argv[1]).resolve()
-p=app/'app/src/main/java/com/wehavephones/XServerDisplayActivity.java'
-s=p.read_text()
-before='''        rootView.addView(inputControlsView);
-'''
-after=before+'''
-        // Android's host pointer duplicates the cursor rendered by X11/WoW.
-        // Apply to these session instances only: drawers, dialogs and editors
-        // retain their normal Android pointer behaviour.
-        final android.view.PointerIcon hiddenAndroidPointer = android.view.PointerIcon.getSystemIcon(
-                this, android.view.PointerIcon.TYPE_NULL);
-        rootView.setPointerIcon(hiddenAndroidPointer);
-        xServerView.setPointerIcon(hiddenAndroidPointer);
-        touchpadView.setPointerIcon(hiddenAndroidPointer);
-        inputControlsView.setPointerIcon(hiddenAndroidPointer);
-'''
-assert s.count(before)==1, 'Unexpected session UI layout'
-p.write_text(s.replace(before,after))
+layout=app/'app/src/main/res/layout/xserver_display_activity.xml'
+s=layout.read_text()
+assert s.count('<FrameLayout\n')==s.count('</FrameLayout>')==1
+layout.write_text(s.replace('<FrameLayout\n', '<com.wehavephones.widget.SessionPointerFrameLayout\n').replace('</FrameLayout>', '</com.wehavephones.widget.SessionPointerFrameLayout>'))
+ET.parse(layout)
+relative='app/src/main/java/com/wehavephones/widget/SessionPointerFrameLayout.java'
+java=app/relative
+assert not java.exists()
+java.write_text(Path(__file__).with_name('SessionPointerFrameLayout.java').read_text())
+subprocess.run(['git','-C',str(app),'add','--intent-to-add',relative],check=True)
 subprocess.run(['git','-C',str(app),'diff','--check'],check=True)
-print('Patched four session view instances; GLRenderer and input handling unchanged')
+changed=set(subprocess.check_output(['git','-C',str(app),'diff','--name-only'],text=True).splitlines())
+assert changed=={relative,'app/src/main/res/layout/xserver_display_activity.xml'}, changed
+print('Pointer v2: custom transparent icon from root resolver; layout and new class only')

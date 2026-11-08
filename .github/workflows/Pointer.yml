@@ -1,4 +1,4 @@
-name: P11 Lab Android mouse pointer fix
+name: P11 Lab transparent Android pointer v2
 on:
   push:
     branches: ['experiment/wow-proton11']
@@ -64,7 +64,7 @@ jobs:
           p=Path('appsrc/app/build.gradle')
           s=p.read_text()
           assert s.count('versionCode 9')==1
-          s=s.replace('versionCode 9','versionCode 10').replace("versionNameSuffix '-p11lab'", "versionNameSuffix '-p11lab-pointer1'")
+          s=s.replace('versionCode 9','versionCode 11').replace("versionNameSuffix '-p11lab'", "versionNameSuffix '-p11lab-pointer2'")
           p.write_text(s)
           PY
       - name: Build updated APK
@@ -79,18 +79,25 @@ jobs:
           python3 baseline/runtime/verify_apk.py "$APK" runtime-result/layer
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$APK" > out/APK-SIGNATURE.txt
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" > out/APK-BADGING.txt
+          javap -classpath appsrc/app/build/intermediates/javac/wehavephonesDebug/classes -c -p com.wehavephones.widget.SessionPointerFrameLayout > out/source/POINTER-BYTECODE.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump xmltree "$APK" res/layout/xserver_display_activity.xml > out/POINTER-LAYOUT.txt
           python3 - <<'PY'
           from pathlib import Path
+          bytecode=Path('out/source/POINTER-BYTECODE.txt').read_text()
+          assert 'android/view/PointerIcon.create:' in bytecode
+          assert 'onResolvePointerIcon(android.view.MotionEvent, int)' in bytecode
+          assert 'com.wehavephones.widget.SessionPointerFrameLayout' in Path('out/POINTER-LAYOUT.txt').read_text()
+          print('PASS: APK layout uses root resolver; compiled class creates a custom icon')
           s=Path('out/APK-SIGNATURE.txt').read_text()
           assert 'Signer #1 certificate SHA-256 digest: c64a3ca9b23da9a62ce1de32a23357966e046e4d48b18d4915f1246cc152dc76' in s
           first=Path('out/APK-BADGING.txt').read_text().splitlines()[0]
-          assert "name='com.wehavephones.p11lab'" in first and "versionCode='10'" in first
-          assert "versionName='0.0.9-p11lab-pointer1'" in first
+          assert "name='com.wehavephones.p11lab'" in first and "versionCode='11'" in first
+          assert "versionName='0.0.9-p11lab-pointer2'" in first
           print(first)
           PY
-          cp "$APK" out/WeHavePhones-P11-Lab-PointerFix.apk
+          cp "$APK" out/WeHavePhones-P11-Lab-PointerFix-v2.apk
           cp trial/pointer/START-RU.md out/
-          cp trial/pointer/patch_pointer.py baseline/runtime/prepare_app.py baseline/runtime/verify_apk.py out/source/
+          cp trial/pointer/patch_pointer.py trial/pointer/SessionPointerFrameLayout.java baseline/runtime/prepare_app.py baseline/runtime/verify_apk.py out/source/
           cp appsrc/LICENSE appsrc/THIRD_PARTY_NOTICES.md out/
           cp runtime-result/applied-source.patch runtime-result/proton-wine-base-source.tar.gz runtime-result/SUBMODULES.txt out/source/
           cp trial/.github/workflows/Pointer.yml out/source/
@@ -102,10 +109,10 @@ jobs:
             echo "Device pointer behaviour: NOT YET TESTED"
           } > out/BUILD-INFO.txt
           cd out
-          sha256sum WeHavePhones-P11-Lab-PointerFix.apk > SHA256SUMS
+          sha256sum WeHavePhones-P11-Lab-PointerFix-v2.apk > SHA256SUMS
       - uses: actions/upload-artifact@v4
         with:
-          name: P11-Lab-PointerFix-${{ github.sha }}
+          name: P11-Lab-PointerFix-v2-${{ github.sha }}
           path: out/
           if-no-files-found: error
           compression-level: 0
