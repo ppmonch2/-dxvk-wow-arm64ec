@@ -21,7 +21,18 @@ def main(app, layer, wcp):
     gradle.write_text(text)
     for p in (app / 'app/src/wehavephonesDebug/res').glob('values*/strings.xml'):
         text = p.read_text().replace('WeHavePhones Dev', 'WeHavePhones P11 Lab')
+        if p.parent.name == 'values':
+            text = text.replace('</resources>',
+                    '    <string name="wehavephones_first_run_intro">Prepare a test container for direct '
+                    'WoW Forever launch. Battle.net is not required.</string>\n</resources>')
         p.write_text(text)
+    # Forever is launched directly. The stock onboarding hides container tools
+    # until Battle.net is installed; this lab is ready once its container is prepared.
+    state = app / 'app/src/wehavephones/java/com/wehavephones/mobile/InitialSetupState.java'
+    text = state.read_text()
+    old = 'complete = completedBefore || (systemReady && hasContainer && battleNetInstalled);'
+    assert text.count(old) == 1
+    state.write_text(text.replace(old, 'complete = completedBefore || containerPrepared;'))
     assets = app / 'app/src/wehavephones/assets'
     manifest = assets / 'wehavephones/wehavephones-runtime-profiles.json'
     data = json.loads(manifest.read_text())
