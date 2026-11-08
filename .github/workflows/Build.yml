@@ -18,7 +18,8 @@ jobs:
 
       - name: Install LLVM-MinGW ARM64 native
         run: |
-          wget -q https://github.com/mstorsjo/llvm-mingw/releases/download/20251104/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
+          curl -fL --retry 3 --connect-timeout 20 --max-time 180 -H 'Accept: application/octet-stream' https://api.github.com/repos/mstorsjo/llvm-mingw/releases/assets/312752406 -o llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
+          echo '3aed6fa47be909884cb3e5634d6b7254604d7104832d6312f8435fb23d5a9bab  llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz' | sha256sum --check
           tar -xf llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64.tar.xz
           echo "$PWD/llvm-mingw-20251104-ucrt-ubuntu-22.04-x86_64/bin" >> "$GITHUB_PATH"
 
