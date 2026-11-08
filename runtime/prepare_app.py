@@ -68,6 +68,12 @@ def main(app, layer, wcp):
     data.update(mode='single', defaultProfile='p11-ge9-wow-lab', singleStageProfile='p11-ge9-wow-lab',
                 profiles={'p11-ge9-wow-lab': profile})
     manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
+    # The upstream driver checker names the stock P10 profile explicitly.
+    # Keep its full driver hash/revision checks, selecting this lab profile.
+    checker = app / 'scripts/verify-wehavephones-turnip.py'
+    text = checker.read_text()
+    assert text.count('profiles["p10-ge34"]') == 1
+    checker.write_text(text.replace('p10-ge34', 'p11-ge9-wow-lab'))
     # Refuse any accidental Wine 10 ntdll/server target in the final manifest.
     assert '10.0-34' not in manifest.read_text()
     print('Prepared com.wehavephones.p11lab; runtime and ntdll/server SHA-256 pinned')
