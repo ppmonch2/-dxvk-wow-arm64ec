@@ -1,0 +1,27 @@
+name: Package readback diagnostic with async disabled
+on:
+  push:
+    branches: ['experiment/wow-arm64-readback-noasync']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download verified native RB kit
+        uses: actions/download-artifact@v4
+        with:
+          name: WOW-DXVK-ARM64-RB-9f30f7325564360345225db5917bfc9daa4ffb50
+          run-id: 42421156542
+          github-token: ${{ github.token }}
+          path: package
+      - name: Disable async in launchers and verify original DLL hashes
+        run: python3 scripts/package_noasync.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WOW-RB-NOASYNC-${{ github.sha }}
+          path: package/
+          retention-days: 30
+          if-no-files-found: error
