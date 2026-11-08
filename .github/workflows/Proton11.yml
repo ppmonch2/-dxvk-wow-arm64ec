@@ -306,6 +306,8 @@ jobs:
         java-version: '17'
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        packages: platform-tools
     - name: Install Android build dependencies
       run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;22.1.7171670" "cmake;3.22.1"
     - name: Stage isolated Proton 11 application
