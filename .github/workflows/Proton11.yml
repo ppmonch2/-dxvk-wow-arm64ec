@@ -310,13 +310,27 @@ jobs:
         packages: platform-tools
     - name: Install Android build dependencies
       run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;22.1.7171670" "cmake;3.22.1"
+    - name: Download verified RB native DLLs
+      uses: actions/download-artifact@v4
+      with:
+        name: WOW-DXVK-ARM64-RB-9f30f7325564360345225db5917bfc9daa4ffb50
+        run-id: 42421156542
+        github-token: ${{ github.token }}
+        path: readback-result
     - name: Stage isolated Proton 11 application
       run: python3 trial/runtime/prepare_app.py appsrc runtime-result/layer runtime-result/WOW-Proton-11.0-9-arm64ec.wcp
+    - name: Integrate readback controls and automatic DLL setup
+      run: python3 trial/runtime/prepare_readback_ui.py appsrc readback-result
     - name: Test direct Forever onboarding
       run: |-
         mkdir lab-java-test
         javac -d lab-java-test appsrc/app/src/wehavephones/java/com/wehavephones/mobile/InitialSetupState.java trial/runtime/InitialSetupLabTest.java
         java -cp lab-java-test com.wehavephones.mobile.InitialSetupLabTest
+    - name: Test DLL backup, rollback and A/B log export
+      run: |-
+        mkdir rb-java-test
+        javac -d rb-java-test trial/runtime/ReadbackFiles.java trial/runtime/ReadbackFilesTest.java
+        java -cp rb-java-test com.wehavephones.mobile.ReadbackFilesTest
     - name: Keep the lab debug signing key across successful builds
       uses: actions/cache@v4
       with:
@@ -331,7 +345,8 @@ jobs:
     - name: Verify APK identity and bundled runtime
       run: |
         python3 trial/runtime/verify_apk.py appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk runtime-result/layer
-        "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk
+        "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk > runtime-result/APK-SIGNATURE.txt
+        cat runtime-result/APK-SIGNATURE.txt
         "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk > runtime-result/APK-BADGING.txt
         python3 - <<'PY'
         from pathlib import Path
@@ -339,12 +354,20 @@ jobs:
         assert text.startswith("package: name='com.wehavephones.p11lab'")
         print(text.splitlines()[0])
         PY
+        python3 - <<'PY'
+        from pathlib import Path
+        assert 'certificate SHA-256 digest: c64a3ca9b23da9a62ce1de32a23357966e046e4d48b18d4915f1246cc152dc76' in Path('runtime-result/APK-SIGNATURE.txt').read_text()
+        print('Update certificate matches the previously installed P11 Lab APK')
+        PY
     - name: Stage tablet test kit
       run: |-
         mkdir -p tablet-kit
         cp appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk tablet-kit/WeHavePhones-P11-Lab.apk
         cp runtime-result/WOW-Proton-11.0-9-arm64ec.wcp runtime-result/VERIFICATION.json runtime-result/APK-BADGING.txt runtime-result/applied-source.patch runtime-result/proton-wine-base-source.tar.gz runtime-result/SUBMODULES.txt tablet-kit/
-        cp trial/PROTON11-RU.md tablet-kit/
+        cp runtime-result/APK-SIGNATURE.txt tablet-kit/
+        cp trial/PROTON11-RU.md trial/READBACK-UI-RU.md tablet-kit/
+        cp -r readback-result/source tablet-kit/dxvk-source
+        cp readback-result/diagnostic.patch readback-result/LICENSE-DXVK readback-result/BUILD-INFO.txt tablet-kit/
         cp appsrc/THIRD_PARTY_NOTICES.md appsrc/LICENSE tablet-kit/
         cp -r trial/runtime tablet-kit/build-scripts
         cp trial/.github/workflows/Proton11.yml tablet-kit/build-scripts/
@@ -353,7 +376,7 @@ jobs:
     - name: Upload tablet test kit
       uses: actions/upload-artifact@v4
       with:
-        name: WOW-Proton11-tablet-kit
+        name: WOW-Proton11-Readback-UI-kit
         path: tablet-kit/
         if-no-files-found: error
         retention-days: 30

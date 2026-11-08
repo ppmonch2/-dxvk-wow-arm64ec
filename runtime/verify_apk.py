@@ -25,3 +25,18 @@ with zipfile.ZipFile(sys.argv[1]) as z:
                             ('bin/wineserver', 'server/wineserver-wow-p11')]:
         assert (pathlib.Path(sys.argv[2]) / relative).read_bytes() == z.read('assets/wehavephones/' + asset)
     print('APK verified: only P11 profile selected, matching runtime DLL/SO/server, SHA-256 verified, Turnip unchanged')
+    expected = {
+        'payload/d3d11.dll': 'a85a0671b6ee6cbba583c840b7cccfda7e63b9da21100ab508062bd5a262eff9',
+        'payload/dxgi.dll': 'c37f3540f5c870e4b19bdc77a7d72e8f2c7ab8ddbc44da13eebaabdc89c7ac15',
+        'stock/d3d11.dll': '5e3cf0b8075e5eed7ef2eb635eb91875573dfc47d42f15dca3a6626db00d2c0d',
+        'stock/dxgi.dll': '176f667e69a948d853082d1859a4d0b97bd84f607f01f159799e434fadba0471',
+    }
+    for name, digest in expected.items():
+        blob = z.read('assets/wehavephones/readback/' + name)
+        assert hashlib.sha256(blob).hexdigest() == digest
+        if name.startswith('payload/'):
+            assert b'WOW-CUSTOM-ARM64-RB' in blob
+    dex = b''.join(z.read(n) for n in z.namelist() if n.endswith('.dex'))
+    assert b'WowReadbackLab' in dex and b'WOW_DXVK_EARLY_READBACK' in dex
+    assert b'WoW-RB-logs' in dex
+    print('Readback integration verified: stock/custom DLL pairs, DXVK marker and compiled startup/UI logic')
