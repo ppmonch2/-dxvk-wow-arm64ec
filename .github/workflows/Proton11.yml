@@ -329,11 +329,16 @@ jobs:
         export JAVA_HOME="$JAVA_HOME_17_X64"
         bash scripts/build-wehavephones.sh
     - name: Verify APK identity and bundled runtime
-      run: |-
+      run: |
         python3 trial/runtime/verify_apk.py appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk runtime-result/layer
         "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk
         "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging appsrc/app/build/outputs/apk/wehavephones/debug/app-wehavephones-debug.apk > runtime-result/APK-BADGING.txt
-        rg "package: name=.com.wehavephones.p11lab." runtime-result/APK-BADGING.txt
+        python3 - <<'PY'
+        from pathlib import Path
+        text = Path('runtime-result/APK-BADGING.txt').read_text()
+        assert text.startswith("package: name='com.wehavephones.p11lab'")
+        print(text.splitlines()[0])
+        PY
     - name: Stage tablet test kit
       run: |-
         mkdir -p tablet-kit
