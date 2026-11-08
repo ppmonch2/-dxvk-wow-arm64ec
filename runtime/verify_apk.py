@@ -18,10 +18,10 @@ with zipfile.ZipFile(sys.argv[1]) as z:
     with z.open('assets/' + layer['asset']) as f:
         assert hashlib.file_digest(f, 'sha256').hexdigest() == layer['sha256']
     for a in profile['ntdll'] + profile['files']:
-        assert hashlib.sha256(z.read('assets/' + a['asset'])).hexdigest() == a['sha256']
+        assert hashlib.sha256(z.read('assets/wehavephones/' + a['asset'])).hexdigest() == a['sha256']
         assert '10.0-34' not in a['asset'] and '10.0-34' not in a['target']
     for relative, asset in [('lib/wine/aarch64-windows/ntdll.dll', 'ntdll/ntdll-wow-p11.dll'),
                             ('lib/wine/aarch64-unix/ntdll.so', 'ntdll/ntdll-wow-p11.so'),
                             ('bin/wineserver', 'server/wineserver-wow-p11')]:
-        assert (pathlib.Path(sys.argv[2]) / relative).read_bytes() == z.read('assets/' + asset)
+        assert (pathlib.Path(sys.argv[2]) / relative).read_bytes() == z.read('assets/wehavephones/' + asset)
     print('APK verified: only P11 profile selected, matching runtime DLL/SO/server, SHA-256 verified, Turnip unchanged')

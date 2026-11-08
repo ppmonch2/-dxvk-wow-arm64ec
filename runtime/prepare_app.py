@@ -50,7 +50,8 @@ def main(app, layer, wcp):
     profile['ntdll'] = []
     for suffix, source in [('dll', 'aarch64-windows/ntdll.dll'), ('so', 'aarch64-unix/ntdll.so')]:
         relative = 'ntdll/ntdll-wow-p11.' + suffix
-        target = assets / relative
+        target = assets / 'wehavephones' / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(layer / 'lib/wine' / source, target)
         profile['ntdll'].append(dict(asset=relative, sha256=sha(target),
                                    target='opt/{wineVersion}/lib/wine/' + source))
@@ -58,7 +59,8 @@ def main(app, layer, wcp):
             profile['ntdll'].append(dict(asset=relative, sha256=sha(target),
                               target='container:.wine/drive_c/windows/system32/ntdll.dll'))
     profile['files'] = [f for f in profile['files'] if not f['asset'].startswith('server/')]
-    server = assets / 'server/wineserver-wow-p11'
+    server = assets / 'wehavephones/server/wineserver-wow-p11'
+    server.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(layer / 'bin/wineserver', server)
     profile['files'].append(dict(asset='server/wineserver-wow-p11', target='opt/{wineVersion}/bin/wineserver',
                                  sha256=sha(server), executable=True))
